@@ -1,0 +1,592 @@
+"""
+Threes Game Implementation for PlayPalace v11.
+
+Low-score dice game: Roll 5 dice, keep at least one each roll.
+Threes = 0 points. Lowest score wins!
+"""
+
+from dataclasses import dataclass, field
+
+from ..base import Game, Player
+from ..registry import register_game
+from ...game_utils.actions import Action, ActionSet
+from ...game_utils.bot_helper import BotHelper
+from ...game_utils.dice import DiceSet
+from ...game_utils.options import IntOption, option_field, GameOptions
+from ...messages.localization import Localization
+from ...ui.keybinds import KeybindState
+
+
+@dataclass
+class ThreesPlayer(Player):
+    """Player state for Threes game."""
+
+    dice: DiceSet = field(default_factory=lambda: DiceSet(num_dice=5, sides=6))
+    turn_score: int = 0  # Score for current turn
+    total_score: int = 0  # Total score across all rounds
+
+
+@dataclass
+class ThreesOptions(GameOptions):
+    """Options for Threes game."""
+
+    total_rounds: int = option_field(
+        IntOption(
+            default=10,
+            min_val=1,
+            max_val=20,
+            value_key="rounds",
+            label="threes-set-rounds",
+            prompt="threes-enter-rounds",
+            change_msg="threes-option-changed-rounds",
+        )
+    )
+
+
+@dataclass
+@register_game
+class ThreesGame(Game):
+    """
+    Threes dice game.
+
+    Roll 5 dice, then keep at least one die each roll before rolling again.
+    Kept dice become locked and can't be rerolled.
+    Continue until all dice are locked or only 1 die remains.
+
+    Scoring:
+    - Threes = 0 points
+    - All other dice = face value
+    - Five sixes = "Shooting the moon" = -30 points
+
+    Lowest score wins after all rounds.
+    """
+
+    players: list[ThreesPlayer] = field(default_factory=list)
+    options: ThreesOptions = field(default_factory=ThreesOptions)
+    current_round: int = 0
+
+    @classmethod
+    def get_name(cls) -> str:
+        return "Threes"
+
+    @classmethod
+    def get_type(cls) -> str:
+        return "threes"
+
+    @classmethod
+    def get_category(cls) -> str:
+        return "category-dice-games"
+
+    @classmethod
+    def get_min_players(cls) -> int:
+        return 2
+
+    @classmethod
+    def get_max_players(cls) -> int:
+        return 8
+
+    def create_player(
+        self, player_id: str, name: str, is_bot: bool = False
+    ) -> ThreesPlayer:
+        """Create a new player with Threes-specific state."""
+        return ThreesPlayer(id=player_id, name=name, is_bot=is_bot)
+
+    def create_turn_action_set(self, player: ThreesPlayer) -> ActionSet:
+        """Create the turn action set for a player."""
+        user = self.get_user(player)
+        locale = user.locale if user else "en"
+
+        action_set = ActionSet(name="turn")
+
+        # Dice keep/unkeep actions (1-5 keys) - shown first when visible
+        for i in range(5):
+            action_set.add(
+                Action(
+                    id=f"toggle_die_{i}",
+                    label=f"Die {i + 1}",
+                    handler=f"_action_toggle_die_{i}",
+                    hidden=True,  # Shown after first roll
+                )
+            )
+
+        action_set.add(
+            Action(
+                id="roll",
+                label=Localization.get(locale, "threes-roll"),
+                handler="_action_roll",
+            )
+        )
+
+        action_set.add(
+            Action(
+                id="bank",
+                label=Localization.get(locale, "threes-bank"),
+                handler="_action_bank",
+                hidden=True,  # Only shown when all dice are kept/locked
+            )
+        )
+
+        # Check hand action
+        action_set.add(
+            Action(
+                id="check_hand",
+                label=Localization.get(locale, "threes-check-hand"),
+                handler="_action_check_hand",
+                hidden=True,  # Keybind only
+            )
+        )
+
+        return action_set
+
+    def setup_keybinds(self) -> None:
+        """Define all keybinds for the game."""
+        super().setup_keybinds()
+
+        # Turn action keybinds - r/b like Pig
+        self.define_keybind("r", "Roll dice", ["roll"], state=KeybindState.ACTIVE)
+        self.define_keybind(
+            "b", "Bank and end turn", ["bank"], state=KeybindState.ACTIVE
+        )
+
+        # Dice toggle keybinds (1-5)
+        for i in range(5):
+            self.define_keybind(
+                str(i + 1),
+                f"Toggle die {i + 1}",
+                [f"toggle_die_{i}"],
+                state=KeybindState.ACTIVE,
+            )
+
+        # Check hand
+        self.define_keybind(
+            "h", "Check hand", ["check_hand"], state=KeybindState.ACTIVE
+        )
+
+    def update_turn_actions(self, player: ThreesPlayer) -> None:
+        """Update turn action availability for a player."""
+        turn_set = self.get_action_set(player, "turn")
+        if not turn_set:
+            return
+
+        is_playing = self.status == "playing"
+        is_current = self.current_player == player
+        has_dice = player.dice.has_rolled
+
+        # Roll is available when it's your turn, you have unlocked dice,
+        # and you've kept at least one die (or it's the first roll)
+        can_roll = False
+        if is_playing and is_current:
+            if not has_dice:
+                # First roll
+                can_roll = True
+            elif player.dice.unlocked_count > 1:
+                # Check if at least one unlocked die is kept
+                can_roll = player.dice.kept_unlocked_count > 0
+
+        if can_roll:
+            turn_set.enable("roll")
+        else:
+            turn_set.disable("roll")
+        # Always show roll when it's your turn (don't hide to avoid menu restructuring)
+        if is_playing and is_current:
+            turn_set.show("roll")
+        else:
+            turn_set.hide("roll")
+
+        # Bank is available when all dice are kept or locked
+        can_bank = is_playing and is_current and has_dice and player.dice.all_decided
+
+        if can_bank:
+            turn_set.enable("bank")
+        else:
+            turn_set.disable("bank")
+        # Always show bank when dice are rolled (don't hide to avoid menu restructuring)
+        if is_playing and is_current and has_dice:
+            turn_set.show("bank")
+        else:
+            turn_set.hide("bank")
+
+        # Dice toggle actions - show when dice have been rolled during your turn
+        for i in range(5):
+            action_id = f"toggle_die_{i}"
+            if is_playing and is_current and has_dice:
+                # Show this die's action
+                turn_set.show(action_id)
+                if player.dice.is_locked(i):
+                    # Locked dice are always disabled but visible
+                    turn_set.disable(action_id)
+                    turn_set.set_label(
+                        action_id, f"{player.dice.get_value(i)} (locked)"
+                    )
+                elif player.dice.unlocked_count <= 1:
+                    # Only 1 unlocked die left - can't toggle, will auto-bank
+                    turn_set.disable(action_id)
+                    turn_set.set_label(action_id, str(player.dice.get_value(i)))
+                elif player.dice.is_kept(i):
+                    turn_set.enable(action_id)
+                    turn_set.set_label(action_id, f"{player.dice.get_value(i)} (kept)")
+                else:
+                    turn_set.enable(action_id)
+                    turn_set.set_label(action_id, str(player.dice.get_value(i)))
+            else:
+                turn_set.hide(action_id)
+                turn_set.disable(action_id)
+
+        # Check hand always available during play
+        if is_playing and has_dice:
+            turn_set.enable("check_hand")
+        else:
+            turn_set.disable("check_hand")
+
+        self.update_standard_actions(player)
+
+    def update_all_turn_actions(self) -> None:
+        """Update turn actions for all players."""
+        for player in self.players:
+            self.update_turn_actions(player)
+
+    def _action_roll(self, player: Player, action_id: str) -> None:
+        """Handle rolling dice."""
+        if not isinstance(player, ThreesPlayer):
+            return
+
+        # If not first roll, must keep at least one unlocked die
+        if player.dice.has_rolled:
+            if player.dice.kept_unlocked_count == 0:
+                user = self.get_user(player)
+                if user:
+                    user.speak_l("threes-must-keep")
+                return
+
+        # Roll dice (locks kept dice and rerolls unlocked)
+        self.play_sound("game_pig/roll.ogg")
+        player.dice.roll()
+
+        # Announce roll
+        dice_str = player.dice.format_values_only()
+        user = self.get_user(player)
+        if user:
+            user.speak_l("threes-you-rolled", dice=dice_str)
+        self.broadcast_l(
+            "threes-player-rolled", exclude=player, player=player.name, dice=dice_str
+        )
+
+        # Check if auto-score needed (all locked or only 1 unlocked)
+        if player.dice.unlocked_count <= 1:
+            self._score_turn(player)
+            return
+
+        # Give bot time to think about next action
+        if player.is_bot:
+            import random
+
+            BotHelper.jolt_bot(player, ticks=random.randint(15, 30))
+
+        self.update_all_turn_actions()
+        self.rebuild_all_menus()
+
+    # Individual die toggle handlers (dispatched by string name)
+    def _action_toggle_die_0(self, player: Player, action_id: str) -> None:
+        self._toggle_die(player, 0)
+
+    def _action_toggle_die_1(self, player: Player, action_id: str) -> None:
+        self._toggle_die(player, 1)
+
+    def _action_toggle_die_2(self, player: Player, action_id: str) -> None:
+        self._toggle_die(player, 2)
+
+    def _action_toggle_die_3(self, player: Player, action_id: str) -> None:
+        self._toggle_die(player, 3)
+
+    def _action_toggle_die_4(self, player: Player, action_id: str) -> None:
+        self._toggle_die(player, 4)
+
+    def _toggle_die(self, player: Player, die_index: int) -> None:
+        """Toggle keeping a die."""
+        if not isinstance(player, ThreesPlayer):
+            return
+
+        user = self.get_user(player)
+        result = player.dice.toggle_keep(die_index)
+
+        if result is None:
+            # Die is locked
+            if user:
+                user.speak_l("threes-die-locked")
+            return
+
+        if result:
+            # Now kept
+            if user:
+                user.speak_l(
+                    "threes-keeping-die", value=player.dice.get_value(die_index)
+                )
+        else:
+            # Now unkept
+            if user:
+                user.speak_l(
+                    "threes-rerolling-die", value=player.dice.get_value(die_index)
+                )
+
+        self.update_all_turn_actions()
+        # Update menu with selection_id to keep focus on the same die
+        self.update_player_menu(player, selection_id=f"toggle_die_{die_index}")
+
+    def _action_bank(self, player: Player, action_id: str) -> None:
+        """Bank score and end turn."""
+        if not isinstance(player, ThreesPlayer):
+            return
+        self._score_turn(player)
+
+    def _action_check_hand(self, player: Player, action_id: str) -> None:
+        """Check current dice."""
+        if not isinstance(player, ThreesPlayer):
+            return
+
+        user = self.get_user(player)
+        if not user:
+            return
+
+        if not player.dice.has_rolled:
+            user.speak_l("threes-no-dice-yet")
+            return
+
+        user.speak_l("threes-your-dice", dice=player.dice.format_all())
+
+    def _score_turn(self, player: ThreesPlayer) -> None:
+        """Calculate and apply turn score."""
+        # Threes = 0 points, so sum all values excluding 3s
+        score = player.dice.sum_values(exclude_value=3)
+        six_count = player.dice.count_value(6)
+
+        # Check for shooting the moon (5 sixes)
+        user = self.get_user(player)
+        if six_count == 5:
+            score = -30
+            self.play_sound("game_pig/win.ogg")
+            if user:
+                user.speak_l("threes-you-shot-moon")
+            self.broadcast_l("threes-shot-moon", exclude=player, player=player.name)
+        else:
+            self.play_sound("game_pig/bank.ogg")
+            if user:
+                user.speak_l("threes-you-scored", score=score)
+            self.broadcast_l(
+                "threes-scored", exclude=player, player=player.name, score=score
+            )
+
+        player.turn_score = score
+        player.total_score += score
+
+        self._end_turn()
+
+    def _end_turn(self) -> None:
+        """End current player's turn."""
+        # Check if round is over
+        if self.turn_index >= len(self.turn_players) - 1:
+            self._end_round()
+        else:
+            self.advance_turn(announce=False)
+            self._start_turn()
+
+    def _end_round(self) -> None:
+        """End the current round."""
+        # Announce round scores
+        scores = [
+            (p.name, p.total_score) for p in self.players if isinstance(p, ThreesPlayer)
+        ]
+        scores.sort(key=lambda x: x[1])  # Sort by score (lowest first)
+        scores_str = ", ".join(f"{name}: {score}" for name, score in scores)
+        self.broadcast_l(
+            "threes-round-scores", round=self.current_round, scores=scores_str
+        )
+
+        # Check if game is over
+        if self.current_round >= self.options.total_rounds:
+            self._end_game()
+        else:
+            # Start next round
+            self._start_round()
+
+    def _start_round(self) -> None:
+        """Start a new round."""
+        self.current_round += 1
+        self.broadcast_l(
+            "threes-round-start",
+            round=self.current_round,
+            total=self.options.total_rounds,
+        )
+
+        # Reset turn order to start of player list
+        self.set_turn_players(self.get_active_players())
+
+        self._start_turn()
+
+    def _start_turn(self) -> None:
+        """Start a player's turn."""
+        player = self.current_player
+        if not player or not isinstance(player, ThreesPlayer):
+            return
+
+        # Reset turn state
+        player.dice.reset()
+        player.turn_score = 0
+
+        # Announce turn (plays sound and broadcasts message)
+        self.announce_turn(turn_sound="game_3cardpoker/turn.ogg")
+
+        if player.is_bot:
+            import random
+
+            BotHelper.jolt_bot(player, ticks=random.randint(20, 40))
+
+        self.update_all_turn_actions()
+        self.rebuild_all_menus()
+
+    def _end_game(self) -> None:
+        """End the game and announce winner."""
+        # Find winner(s) (lowest score)
+        players_with_scores = [
+            (p, p.total_score) for p in self.players if isinstance(p, ThreesPlayer)
+        ]
+        players_with_scores.sort(key=lambda x: x[1])
+
+        lowest_score = players_with_scores[0][1]
+        winners = [p for p, s in players_with_scores if s == lowest_score]
+
+        if len(winners) == 1:
+            self.play_sound("game_pig/win.ogg")
+            self.broadcast_l(
+                "threes-winner", player=winners[0].name, score=lowest_score
+            )
+        else:
+            winner_names = " and ".join(w.name for w in winners)
+            self.broadcast_l("threes-tie", players=winner_names, score=lowest_score)
+
+        self._show_game_end()
+        self.finish_game()
+
+    def _show_game_end(self) -> None:
+        """Show the game end menu to all players."""
+        sorted_players = sorted(
+            [p for p in self.players if isinstance(p, ThreesPlayer)],
+            key=lambda p: p.total_score,
+        )
+        lines = ["Final Scores:"]
+        for i, p in enumerate(sorted_players, 1):
+            lines.append(f"{i}. {p.name}: {p.total_score} points")
+        self.show_game_end_menu(lines)
+
+    def on_start(self) -> None:
+        """Called when the game starts."""
+        self.status = "playing"
+        self.game_active = True
+        self.current_round = 0
+
+        # Reset player scores
+        for player in self.players:
+            if isinstance(player, ThreesPlayer):
+                player.total_score = 0
+                player.dice.reset()
+
+        # Initialize turn order
+        self.set_turn_players(self.get_active_players())
+
+        # Update actions
+        self.update_all_lobby_actions()
+        self.update_all_options_actions()
+        self.update_all_turn_actions()
+
+        # Play music
+        self.play_music("game_pig/mus.ogg")
+
+        # Start first round
+        self._start_round()
+
+    def on_tick(self) -> None:
+        """Called every tick. Handle bot AI."""
+        if not self.game_active:
+            return
+        BotHelper.on_tick(self)
+
+    def bot_think(self, player: Player) -> str | None:
+        """Bot AI decision making."""
+        if not isinstance(player, ThreesPlayer):
+            return None
+
+        # If no dice, roll
+        if not player.dice.has_rolled:
+            return "roll"
+
+        # If only 1 unlocked die, we must bank (auto-handled)
+        if player.dice.unlocked_count <= 1:
+            return "bank"
+
+        # Check if all dice are kept/locked - then bank
+        if player.dice.all_decided:
+            return "bank"
+
+        # Decide what to keep using strategy
+        self._bot_decide_keepers(player)
+
+        # Update actions since we changed kept state
+        self.update_turn_actions(player)
+
+        # If we've kept something new, roll
+        if player.dice.kept_unlocked_count > 0:
+            return "roll"
+
+        # Fallback: shouldn't reach here, but keep lowest if we do
+        return None
+
+    def _bot_decide_keepers(self, player: ThreesPlayer) -> None:
+        """Bot AI to decide which dice to keep."""
+        dice = player.dice
+
+        # Clear current kept dice (except locked ones)
+        dice.kept = list(dice.locked)
+
+        # Group available dice by value
+        available: dict[int, list[int]] = {}  # value -> list of indices
+        for i in range(5):
+            if not dice.is_locked(i):
+                value = dice.get_value(i)
+                if value is not None:
+                    if value not in available:
+                        available[value] = []
+                    available[value].append(i)
+
+        # Count locked sixes for moon shot check
+        locked_sixes = sum(1 for i in dice.locked if dice.get_value(i) == 6)
+        available_sixes = available.get(6, [])
+
+        # Strategy 1: Go for moon shot if 3+ sixes locked or 4+ total sixes
+        if locked_sixes >= 3 or (len(available_sixes) + locked_sixes >= 4):
+            for i in available_sixes:
+                dice.keep(i)
+            if available_sixes:
+                return
+
+        # Strategy 2: Keep threes (0 points!)
+        if 3 in available:
+            for i in available[3]:
+                dice.keep(i)
+            return
+
+        # Strategy 3: Keep ones (low value)
+        if 1 in available:
+            for i in available[1]:
+                dice.keep(i)
+            return
+
+        # Strategy 4: Keep twos
+        if 2 in available:
+            for i in available[2]:
+                dice.keep(i)
+            return
+
+        # Strategy 5: Keep lowest available
+        for value in [4, 5, 6]:
+            if value in available:
+                dice.keep(available[value][0])
+                return

@@ -1,0 +1,1565 @@
+"""Base game class and player dataclass."""
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
+from abc import ABC, abstractmethod
+
+from mashumaro.mixins.json import DataClassJSONMixin
+from mashumaro.config import BaseConfig
+
+from ..users.base import User, MenuItem, EscapeBehavior
+from ..users.bot import Bot
+from ..game_utils.actions import Action, ActionSet, MenuInput, EditboxInput
+from ..game_utils.options import (
+    GameOptions as DeclarativeGameOptions,
+    get_option_meta,
+    MenuOption,
+)
+from ..game_utils.teams import TeamManager
+from ..messages.localization import Localization
+from ..ui.keybinds import Keybind, KeybindState
+
+
+@dataclass
+class ActionContext:
+    """Context passed to action handlers when triggered by keybind."""
+
+    menu_item_id: str | None = None  # ID of selected menu item when keybind pressed
+    menu_index: int | None = None  # 1-based index of selected menu item
+    from_keybind: bool = (
+        False  # True if triggered by keybind, False if by menu selection
+    )
+
+
+# Default bot names available for selection
+BOT_NAMES = [
+    "Alice",
+    "Bob",
+    "Charlie",
+    "Diana",
+    "Eve",
+    "Frank",
+    "Grace",
+    "Henry",
+    "Ivy",
+    "Jack",
+    "Kate",
+    "Leo",
+    "Mia",
+    "Noah",
+    "Olivia",
+    "Pete",
+    "Quinn",
+    "Rose",
+    "Sam",
+    "Tina",
+    "Uma",
+    "Vic",
+    "Wendy",
+    "Xander",
+    "Yara",
+    "Zack",
+]
+
+
+@dataclass
+class Player(DataClassJSONMixin):
+    """
+    A player in a game.
+
+    This is a dataclass that gets serialized with the game state.
+    The user field is not serialized - it's reattached on load.
+    """
+
+    id: str  # UUID - unique identifier (from user.uuid for humans, generated for bots)
+    name: str  # Display name
+    is_bot: bool = False
+    is_spectator: bool = False
+    # Bot AI state (serialized for persistence)
+    bot_think_ticks: int = 0  # Ticks until bot can act
+    bot_pending_action: str | None = None  # Action to execute when ready
+    bot_target: int | None = None  # Game-specific target (e.g., score to reach)
+
+
+# Re-export GameOptions from options module for backwards compatibility
+GameOptions = DeclarativeGameOptions
+
+
+@dataclass
+class Game(ABC, DataClassJSONMixin):
+    """
+    Abstract base class for all games.
+
+    Games are dataclasses that can be serialized with Mashumaro.
+    All game state must be stored in dataclass fields.
+
+    Games are synchronous and state-based. They expose actions that
+    players can take, and these actions modify state imperatively.
+
+    Games have three phases:
+    - waiting: Lobby phase, host can add bots and start
+    - playing: Game in progress
+    - finished: Game over
+    """
+
+    class Config(BaseConfig):
+        # Serialize all fields (don't omit defaults - breaks state restoration)
+        serialize_by_alias = True
+
+    # Game state
+    players: list[Player] = field(default_factory=list)
+    round: int = 0
+    game_active: bool = False
+    status: str = "waiting"  # waiting, playing, finished
+    host: str = ""  # Username of the host
+    current_music: str = ""  # Currently playing music track
+    current_ambience: str = ""  # Currently playing ambience loop
+    turn_index: int = 0  # Current turn index (serialized for persistence)
+    turn_player_ids: list[str] = field(
+        default_factory=list
+    )  # Player IDs in turn order (serialized)
+    # Round timer state (serialized for persistence)
+    round_timer_state: str = "idle"  # idle, counting, paused
+    round_timer_ticks: int = 0  # Remaining ticks in countdown
+    # Sound scheduler state (serialized for persistence)
+    scheduled_sounds: list = field(
+        default_factory=list
+    )  # [[tick, sound, vol, pan, pitch], ...]
+    sound_scheduler_tick: int = 0  # Current tick counter
+    # Action sets (serialized - actions are pure data now)
+    player_action_sets: dict[str, list[ActionSet]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Initialize non-serialized state."""
+        # These are runtime-only, not serialized
+        self._users: dict[str, User] = {}  # player_id -> User
+        self._table: Any = None  # Reference to Table (set by server)
+        self._keybinds: dict[
+            str, list[Keybind]
+        ] = {}  # key -> list of Keybinds (allows same key for different states)
+        self._pending_actions: dict[
+            str, str
+        ] = {}  # player_id -> action_id (waiting for input)
+        self._action_context: dict[
+            str, ActionContext
+        ] = {}  # player_id -> context during action execution
+        self._status_box_open: set[str] = set()  # player_ids with status box open
+        self._actions_menu_open: set[str] = set()  # player_ids with actions menu open
+        self._destroyed: bool = False  # Whether game has been destroyed
+
+    def rebuild_runtime_state(self) -> None:
+        """
+        Rebuild non-serialized runtime state after deserialization.
+
+        Called after loading a game from JSON. Subclasses should override
+        this to rebuild any runtime-only objects not stored in serialized fields.
+        Turn management and sound scheduling are now built into the base class
+        using serialized fields, so they don't need rebuilding.
+        """
+        # Base class has nothing to rebuild by default
+        pass
+
+    # Abstract methods games must implement
+
+    @classmethod
+    @abstractmethod
+    def get_name(cls) -> str:
+        """Return the display name of this game (English fallback)."""
+        ...
+
+    @classmethod
+    @abstractmethod
+    def get_type(cls) -> str:
+        """Return the type identifier for this game."""
+        ...
+
+    @classmethod
+    def get_name_key(cls) -> str:
+        """Return the localization key for this game's name."""
+        return f"game-name-{cls.get_type()}"
+
+    @classmethod
+    def get_category(cls) -> str:
+        """Return the category localization key for this game."""
+        return "category-uncategorized"
+
+    @classmethod
+    def get_min_players(cls) -> int:
+        """Return minimum number of players."""
+        return 2
+
+    @classmethod
+    def get_max_players(cls) -> int:
+        """Return maximum number of players."""
+        return 4
+
+    @abstractmethod
+    def on_start(self) -> None:
+        """Called when the game starts."""
+        ...
+
+    @abstractmethod
+    def on_tick(self) -> None:
+        """Called every tick (50ms). Handle bot AI here."""
+        ...
+
+    def on_round_timer_ready(self) -> None:
+        """Called when round timer expires. Override in subclasses that use RoundTimer."""
+        pass
+
+    def finish_game(self) -> None:
+        """Mark the game as finished and handle cleanup.
+
+        Call this instead of setting status directly to ensure proper cleanup.
+        If no humans remain, the table is automatically destroyed.
+        """
+        self.game_active = False
+        self.status = "finished"
+        # Auto-destroy if no humans remain (bot-only games)
+        has_humans = any(not p.is_bot for p in self.players)
+        if not has_humans:
+            self.destroy()
+
+    def show_game_end_menu(self, score_lines: list[str]) -> None:
+        """Show the game end menu to all players.
+
+        Args:
+            score_lines: List of score lines to display
+                         (e.g., ["Final Scores:", "1. Alice: 100 points", ...])
+        """
+        for player in self.players:
+            user = self.get_user(player)
+            if user:
+                locale = user.locale
+                items = [MenuItem(text=line, id="score_line") for line in score_lines]
+                leave_text = Localization.get(locale, "game-leave")
+                items.append(MenuItem(text=leave_text, id="leave_game"))
+                user.show_menu("game_over", items, multiletter=False)
+
+    # Player management
+
+    def attach_user(self, player_id: str, user: User) -> None:
+        """Attach a user to a player by ID."""
+        self._users[player_id] = user
+        # Play current music/ambience for the joining user
+        if self.current_music:
+            user.play_music(self.current_music)
+        if self.current_ambience:
+            user.play_ambience(self.current_ambience)
+
+    def get_user(self, player: Player) -> User | None:
+        """Get the user for a player."""
+        return self._users.get(player.id)
+
+    def get_player_by_id(self, player_id: str) -> Player | None:
+        """Get a player by ID (UUID)."""
+        for player in self.players:
+            if player.id == player_id:
+                return player
+        return None
+
+    def get_player_by_name(self, name: str) -> Player | None:
+        """Get a player by display name. Note: Names may not be unique."""
+        for player in self.players:
+            if player.name == name:
+                return player
+        return None
+
+    @property
+    def current_player(self) -> Player | None:
+        """Get the current player based on turn_index and turn_player_ids."""
+        if not self.turn_player_ids:
+            return None
+        index = self.turn_index % len(self.turn_player_ids)
+        player_id = self.turn_player_ids[index]
+        return self.get_player_by_id(player_id)
+
+    @current_player.setter
+    def current_player(self, player: Player | None) -> None:
+        """Set the current player by updating turn_index."""
+        if player is None or player.id not in self.turn_player_ids:
+            return
+        self.turn_index = self.turn_player_ids.index(player.id)
+
+    @property
+    def team_manager(self) -> TeamManager | None:
+        """
+        Get the team manager for this game.
+
+        Subclasses should override this to return their team_manager instance.
+        Returns None by default (no team-based scoring).
+        """
+        return None
+
+    # Action Set System
+
+    def get_action_sets(self, player: Player) -> list[ActionSet]:
+        """Get ordered list of action sets for a player."""
+        return self.player_action_sets.get(player.id, [])
+
+    def get_action_set(self, player: Player, name: str) -> ActionSet | None:
+        """Get a specific action set by name for a player."""
+        for action_set in self.get_action_sets(player):
+            if action_set.name == name:
+                return action_set
+        return None
+
+    def add_action_set(self, player: Player, action_set: ActionSet) -> None:
+        """Add an action set to a player (appended to end of list)."""
+        if player.id not in self.player_action_sets:
+            self.player_action_sets[player.id] = []
+        self.player_action_sets[player.id].append(action_set)
+
+    def remove_action_set(self, player: Player, name: str) -> None:
+        """Remove an action set from a player by name."""
+        if player.id in self.player_action_sets:
+            self.player_action_sets[player.id] = [
+                s for s in self.player_action_sets[player.id] if s.name != name
+            ]
+
+    def find_action(self, player: Player, action_id: str) -> Action | None:
+        """Find an action by ID across all of a player's action sets."""
+        for action_set in self.get_action_sets(player):
+            action = action_set.get_action(action_id)
+            if action:
+                return action
+        return None
+
+    def get_all_visible_actions(self, player: Player) -> list[Action]:
+        """Get all visible (enabled and not hidden) actions for a player, in order."""
+        result = []
+        for action_set in self.get_action_sets(player):
+            result.extend(action_set.get_visible_actions())
+        return result
+
+    def get_all_enabled_actions(self, player: Player) -> list[Action]:
+        """Get all enabled actions for a player (for F5 menu), in order."""
+        result = []
+        for action_set in self.get_action_sets(player):
+            result.extend(action_set.get_enabled_actions())
+        return result
+
+    def define_keybind(
+        self,
+        key: str,
+        name: str,
+        actions: list[str],
+        *,
+        requires_focus: bool = False,
+        state: KeybindState = KeybindState.ALWAYS,
+        players: list[str] | None = None,
+        include_spectators: bool = False,
+    ) -> None:
+        """
+        Define a keybind that triggers one or more actions.
+
+        Args:
+            key: The key combination (e.g., "space", "shift+b", "f5")
+            name: Human-readable name for the keybind (e.g., "Roll dice")
+            actions: List of action IDs this keybind triggers
+            requires_focus: If True, must be focused on a valid menu item
+            state: When the keybind is active (NEVER, IDLE, ACTIVE, ALWAYS)
+            players: List of player names who can use (empty/None = all)
+            include_spectators: Whether spectators can use this keybind
+        """
+        keybind = Keybind(
+            name=name,
+            default_key=key,
+            actions=actions,
+            requires_focus=requires_focus,
+            state=state,
+            players=players or [],
+            include_spectators=include_spectators,
+        )
+        if key not in self._keybinds:
+            self._keybinds[key] = []
+        self._keybinds[key].append(keybind)
+
+    def _get_keybind_for_action(self, action_id: str) -> str | None:
+        """Get the keybind string for an action, if any."""
+        for key, keybinds in self._keybinds.items():
+            for keybind in keybinds:
+                if action_id in keybind.actions:
+                    return key
+        return None
+
+    def _is_player_spectator(self, player: Player) -> bool:
+        """Check if a player is a spectator."""
+        return player.is_spectator
+
+    def get_active_players(self) -> list[Player]:
+        """Get list of players who are not spectators (actually playing)."""
+        return [p for p in self.players if not p.is_spectator]
+
+    def get_active_player_count(self) -> int:
+        """Get the number of active (non-spectator) players."""
+        return len(self.get_active_players())
+
+    def execute_action(
+        self,
+        player: Player,
+        action_id: str,
+        input_value: str | None = None,
+        context: ActionContext | None = None,
+    ) -> None:
+        """Execute an action for a player, optionally with input value and context."""
+        action = self.find_action(player, action_id)
+        if not action:
+            return
+
+        # Check if action is enabled
+        if not action.enabled:
+            return
+
+        # If action requires input and we don't have it yet
+        if action.input_request is not None and input_value is None:
+            # For bots, get input automatically
+            if player.is_bot:
+                # Set pending action so options methods can access action_id
+                self._pending_actions[player.id] = action_id
+                input_value = self._get_bot_input(action, player)
+                # Clean up pending action for bot
+                if player.id in self._pending_actions:
+                    del self._pending_actions[player.id]
+                if input_value is None:
+                    return  # Bot couldn't provide input
+            else:
+                # For humans, request input and store pending action
+                self._request_action_input(action, player)
+                return
+
+        # Look up the handler method by name on this game object
+        handler = getattr(self, action.handler, None)
+        if not handler:
+            return
+
+        # Store context for handlers that need it (e.g., keybind-triggered actions)
+        self._action_context[player.id] = context or ActionContext()
+
+        try:
+            # Execute the action handler (always pass action_id for context)
+            if action.input_request is not None and input_value is not None:
+                # Handler expects input value: (player, input_value, action_id)
+                handler(player, input_value, action_id)
+            else:
+                # Handler doesn't expect input: (player, action_id)
+                handler(player, action_id)
+        finally:
+            # Clean up context
+            self._action_context.pop(player.id, None)
+
+    def get_action_context(self, player: Player) -> ActionContext:
+        """Get the current action context for a player (for use in handlers)."""
+        return self._action_context.get(player.id, ActionContext())
+
+    def _get_menu_options_for_action(
+        self, action: Action, player: Player
+    ) -> list[str] | None:
+        """Get menu options for an action, checking method first then MenuOption metadata."""
+        req = action.input_request
+        if not isinstance(req, MenuInput):
+            return None
+
+        # First try the method name
+        options_method = getattr(self, req.options, None)
+        if options_method:
+            return options_method(player)
+
+        # Fallback: check if this is a set_* action for a MenuOption
+        if action.id.startswith("set_") and hasattr(self, "options"):
+            option_name = action.id[4:]  # Remove "set_" prefix
+            meta = get_option_meta(type(self.options), option_name)
+            if meta and isinstance(meta, MenuOption):
+                choices = meta.choices
+                # Choices can be a list or a callable
+                if callable(choices):
+                    return choices(self, player)
+                return list(choices)
+
+        return None
+
+    def _get_bot_input(self, action: Action, player: Player) -> str | None:
+        """Get automatic input for a bot player."""
+        req = action.input_request
+        if isinstance(req, MenuInput):
+            options = self._get_menu_options_for_action(action, player)
+            if not options:
+                return None
+            if req.bot_select:
+                # Look up bot_select method by name
+                bot_select_method = getattr(self, req.bot_select, None)
+                if bot_select_method:
+                    return bot_select_method(player, options)
+            # Default: pick first option
+            return options[0]
+        elif isinstance(req, EditboxInput):
+            if req.bot_input:
+                # Look up bot_input method by name
+                bot_input_method = getattr(self, req.bot_input, None)
+                if bot_input_method:
+                    return bot_input_method(player)
+            # Default: use default value
+            return req.default
+        return None
+
+    def _request_action_input(self, action: Action, player: Player) -> None:
+        """Request input from a human player for an action."""
+        user = self.get_user(player)
+        if not user:
+            return
+
+        req = action.input_request
+        self._pending_actions[player.id] = action.id
+
+        if isinstance(req, MenuInput):
+            options = self._get_menu_options_for_action(action, player)
+            if not options:
+                # No options available
+                del self._pending_actions[player.id]
+                user.speak_l("no-options-available")
+                return
+
+            items = [MenuItem(text=opt, id=opt) for opt in options]
+            items.append(
+                MenuItem(text=Localization.get(user.locale, "cancel"), id="_cancel")
+            )
+            user.show_menu(
+                "action_input_menu",
+                items,
+                multiletter=True,
+                escape_behavior=EscapeBehavior.SELECT_LAST,
+            )
+
+        elif isinstance(req, EditboxInput):
+            # Show editbox for text input
+            prompt = Localization.get(user.locale, req.prompt)
+            user.show_editbox("action_input_editbox", prompt, req.default)
+
+    def end_turn(self) -> None:
+        """End the current player's turn. Call this from action handlers."""
+        # Default behavior - can be overridden by games
+        self.advance_turn()
+
+    # ==========================================================================
+    # Turn Management (built-in, no external manager needed)
+    # ==========================================================================
+
+    def set_turn_players(self, players: list[Player], reset_index: bool = True) -> None:
+        """Set the list of players in turn order.
+
+        Args:
+            players: List of players to include in turn rotation.
+            reset_index: If True, reset turn_index to 0.
+        """
+        self.turn_player_ids = [p.id for p in players]
+        if reset_index:
+            self.turn_index = 0
+
+    def advance_turn(self, announce: bool = True) -> Player | None:
+        """Advance to the next player's turn.
+
+        Args:
+            announce: If True, announce the turn and play sound.
+
+        Returns:
+            The new current player.
+        """
+        if not self.turn_player_ids:
+            return None
+        self.turn_index = (self.turn_index + 1) % len(self.turn_player_ids)
+        if announce:
+            self.announce_turn()
+        self.rebuild_all_menus()
+        return self.current_player
+
+    def reset_turn_order(self, announce: bool = False) -> None:
+        """Reset to the first player in turn order.
+
+        Args:
+            announce: If True, announce the turn and play sound.
+        """
+        self.turn_index = 0
+        if announce:
+            self.announce_turn()
+
+    def announce_turn(self, turn_sound: str = "game_pig/turn.ogg") -> None:
+        """Announce the current player's turn with sound and message."""
+        player = self.current_player
+        if not player:
+            return
+
+        # Play turn sound to the current player
+        user = self.get_user(player)
+        if user:
+            user.play_sound(turn_sound)
+
+        # Broadcast turn announcement to all players
+        self.broadcast_l("game-turn-start", player=player.name)
+
+    @property
+    def turn_players(self) -> list[Player]:
+        """Get the list of players in turn order."""
+        return [
+            p
+            for player_id in self.turn_player_ids
+            if (p := self.get_player_by_id(player_id)) is not None
+        ]
+
+    # ==========================================================================
+    # Sound Scheduling (built-in, no external scheduler needed)
+    # ==========================================================================
+
+    TICKS_PER_SECOND = 20  # 50ms per tick
+
+    def schedule_sound(
+        self,
+        sound: str,
+        delay_ticks: int = 0,
+        volume: int = 100,
+        pan: int = 0,
+        pitch: int = 100,
+    ) -> None:
+        """Schedule a sound to play after a delay.
+
+        Args:
+            sound: Sound file name to play.
+            delay_ticks: Number of ticks to wait before playing (0 = next tick).
+            volume: Volume (0-100).
+            pan: Pan (-100 to 100, 0 = center).
+            pitch: Pitch (100 = normal).
+        """
+        target_tick = self.sound_scheduler_tick + delay_ticks
+        self.scheduled_sounds.append([target_tick, sound, volume, pan, pitch])
+
+    def schedule_sound_sequence(
+        self,
+        sounds: list[tuple[str, int]],
+        start_delay: int = 0,
+    ) -> None:
+        """Schedule a sequence of sounds with delays between them.
+
+        Args:
+            sounds: List of (sound_name, delay_after) tuples.
+            start_delay: Initial delay before first sound.
+        """
+        current_tick = start_delay
+        for sound, delay_after in sounds:
+            self.schedule_sound(sound, delay_ticks=current_tick)
+            current_tick += delay_after
+
+    def clear_scheduled_sounds(self) -> None:
+        """Clear all scheduled sounds."""
+        self.scheduled_sounds.clear()
+
+    def process_scheduled_sounds(self) -> None:
+        """Process scheduled sounds. Called automatically in on_tick()."""
+        current_tick = self.sound_scheduler_tick
+
+        # Find and play sounds scheduled for this tick
+        remaining = []
+        for scheduled in self.scheduled_sounds:
+            tick, sound, volume, pan, pitch = scheduled
+            if tick <= current_tick:
+                self.play_sound(sound, volume, pan, pitch)
+            else:
+                remaining.append(scheduled)
+
+        self.scheduled_sounds = remaining
+        self.sound_scheduler_tick += 1
+
+    # Communication helpers
+
+    def broadcast(
+        self, text: str, buffer: str = "misc", exclude: Player | None = None
+    ) -> None:
+        """Send a message to all players, optionally excluding one."""
+        for player in self.players:
+            if player is exclude:
+                continue
+            user = self.get_user(player)
+            if user:
+                user.speak(text, buffer)
+
+    def broadcast_l(
+        self,
+        message_id: str,
+        buffer: str = "misc",
+        exclude: Player | None = None,
+        **kwargs,
+    ) -> None:
+        """Send a localized message to all players (each in their own locale)."""
+        for player in self.players:
+            if player is exclude:
+                continue
+            user = self.get_user(player)
+            if user:
+                user.speak_l(message_id, buffer, **kwargs)
+
+    def label_l(self, message_id: str) -> Callable[["Game", "Player"], str]:
+        """
+        Create a localized label callable for use in action definitions.
+
+        Usage:
+            self.define_action("roll", label=self.label_l("pig-roll"), ...)
+        """
+
+        def get_label(game: "Game", player: "Player") -> str:
+            user = game.get_user(player)
+            locale = user.locale if user else "en"
+            return Localization.get(locale, message_id)
+
+        return get_label
+
+    def broadcast_sound(
+        self, name: str, volume: int = 100, pan: int = 0, pitch: int = 100
+    ) -> None:
+        """Play a sound for all players."""
+        for player in self.players:
+            user = self.get_user(player)
+            if user:
+                user.play_sound(name, volume, pan, pitch)
+
+    def play_sound(
+        self, name: str, volume: int = 100, pan: int = 0, pitch: int = 100
+    ) -> None:
+        """Alias for broadcast_sound."""
+        self.broadcast_sound(name, volume, pan, pitch)
+
+    def play_music(self, name: str, looping: bool = True) -> None:
+        """Play music for all players and store as current."""
+        self.current_music = name
+        for player in self.players:
+            user = self.get_user(player)
+            if user:
+                user.play_music(name, looping)
+
+    def play_ambience(self, loop: str, intro: str = "", outro: str = "") -> None:
+        """Play ambient sound for all players."""
+        self.current_ambience = loop
+        for player in self.players:
+            user = self.get_user(player)
+            if user:
+                user.play_ambience(loop, intro, outro)
+
+    def stop_ambience(self) -> None:
+        """Stop ambient sound for all players."""
+        self.current_ambience = ""
+        for player in self.players:
+            user = self.get_user(player)
+            if user:
+                user.stop_ambience()
+
+    # Menu management
+
+    def rebuild_player_menu(self, player: Player) -> None:
+        """Rebuild the turn menu for a player."""
+        if self._destroyed:
+            return  # Don't rebuild menus after game is destroyed
+        user = self.get_user(player)
+        if not user:
+            return
+
+        items: list[MenuItem] = []
+        for action in self.get_all_visible_actions(player):
+            items.append(MenuItem(text=action.label, id=action.id))
+
+        user.show_menu(
+            "turn_menu",
+            items,
+            multiletter=False,
+            escape_behavior=EscapeBehavior.KEYBIND,
+        )
+
+    def rebuild_all_menus(self) -> None:
+        """Rebuild menus for all players."""
+        if self._destroyed:
+            return  # Don't rebuild menus after game is destroyed
+        for player in self.players:
+            self.rebuild_player_menu(player)
+
+    def update_player_menu(
+        self, player: Player, selection_id: str | None = None
+    ) -> None:
+        """Update the turn menu for a player, preserving focus position."""
+        if self._destroyed:
+            return
+        user = self.get_user(player)
+        if not user:
+            return
+
+        items: list[MenuItem] = []
+        for action in self.get_all_visible_actions(player):
+            items.append(MenuItem(text=action.label, id=action.id))
+
+        user.update_menu("turn_menu", items, selection_id=selection_id)
+
+    def update_all_menus(self) -> None:
+        """Update menus for all players, preserving focus position."""
+        if self._destroyed:
+            return
+        for player in self.players:
+            self.update_player_menu(player)
+
+    def status_box(self, player: Player, lines: list[str]) -> None:
+        """Show a status box (menu with text items) to a player.
+
+        Press Enter on any item to close. No header or close button needed
+        since screen readers speak list items and Enter always closes.
+        """
+        user = self.get_user(player)
+        if user:
+            items = [MenuItem(text=line, id="status_line") for line in lines]
+            user.show_menu(
+                "status_box",
+                items,
+                multiletter=False,
+                escape_behavior=EscapeBehavior.SELECT_LAST,
+            )
+            self._status_box_open.add(player.id)
+
+    # Event handling
+
+    def handle_event(self, player: Player, event: dict) -> None:
+        """Handle an event from a player."""
+        event_type = event.get("type")
+
+        if event_type == "menu":
+            menu_id = event.get("menu_id")
+            selection_id = event.get("selection_id", "")
+
+            if menu_id == "turn_menu":
+                # If interacting with turn_menu, actions menu is no longer open
+                self._actions_menu_open.discard(player.id)
+                # Try by ID first, then by index
+                action = (
+                    self.find_action(player, selection_id) if selection_id else None
+                )
+                if action and action.enabled:
+                    self.execute_action(player, selection_id)
+                    # Don't rebuild if action is waiting for input
+                    if player.id not in self._pending_actions:
+                        self.rebuild_all_menus()
+                else:
+                    # Fallback to index-based selection - use visible actions only
+                    selection = event.get("selection", 1) - 1  # Convert to 0-based
+                    visible = self.get_all_visible_actions(player)
+                    if 0 <= selection < len(visible):
+                        action = visible[selection]
+                        self.execute_action(player, action.id)
+                        # Don't rebuild if action is waiting for input
+                        if player.id not in self._pending_actions:
+                            self.rebuild_all_menus()
+
+            elif menu_id == "actions_menu":
+                # F5 menu - use selection_id directly
+                if selection_id:
+                    self._handle_actions_menu_selection(player, selection_id)
+
+            elif menu_id == "status_box":
+                user = self.get_user(player)
+                if user:
+                    user.remove_menu("status_box")
+                    user.speak_l("status-box-closed")
+                    self._status_box_open.discard(player.id)
+                    self.rebuild_player_menu(player)
+
+            elif menu_id == "game_over":
+                # Handle game over menu - leave_game is the only selectable action
+                # It's always the last item
+                if selection_id == "leave_game":
+                    self.execute_action(player, "leave_game")
+                else:
+                    # Index-based - any selection triggers leave
+                    self.execute_action(player, "leave_game")
+
+            elif menu_id == "action_input_menu":
+                # Handle action input menu selection
+                if player.id in self._pending_actions:
+                    action_id = self._pending_actions.pop(player.id)
+                    if selection_id != "_cancel":
+                        # Execute the action with the selected input
+                        self.execute_action(player, action_id, selection_id)
+                self.rebuild_player_menu(player)
+
+        elif event_type == "editbox":
+            input_id = event.get("input_id", "")
+            text = event.get("text", "")
+
+            if input_id == "action_input_editbox":
+                # Handle action input editbox submission
+                if player.id in self._pending_actions:
+                    action_id = self._pending_actions.pop(player.id)
+                    if text:  # Non-empty input
+                        self.execute_action(player, action_id, text)
+                self.rebuild_player_menu(player)
+
+        elif event_type == "keybind":
+            key = event.get("key", "").lower()  # Normalize to lowercase
+            menu_item_id = event.get("menu_item_id")
+            menu_index = event.get("menu_index")
+
+            # Handle modifiers - reconstruct full key string
+            if event.get("shift") and not key.startswith("shift+"):
+                key = f"shift+{key}"
+            if event.get("control") and not key.startswith("ctrl+"):
+                key = f"ctrl+{key}"
+            if event.get("alt") and not key.startswith("alt+"):
+                key = f"alt+{key}"
+
+            # Look up keybinds for this key
+            keybinds = self._keybinds.get(key)
+            if keybinds is None:
+                return
+
+            # Check if player is a spectator
+            is_spectator = self._is_player_spectator(player)
+
+            # Build context for action handlers
+            context = ActionContext(
+                menu_item_id=menu_item_id,
+                menu_index=menu_index,
+                from_keybind=True,
+            )
+
+            # Try each keybind for this key (allows same key for different states)
+            executed_any = False
+            for keybind in keybinds:
+                # Check if keybind can be used by this player in current state
+                if not keybind.can_player_use(self, player, is_spectator):
+                    continue
+
+                # Check focus requirement
+                if keybind.requires_focus and menu_item_id not in keybind.actions:
+                    continue
+
+                # Execute all enabled actions in the keybind
+                for action_id in keybind.actions:
+                    action = self.find_action(player, action_id)
+                    if action and action.enabled:
+                        self.execute_action(player, action_id, context=context)
+                        executed_any = True
+
+            # Don't rebuild if action is waiting for input, status box is open, or actions menu is open
+            if (
+                executed_any
+                and player.id not in self._pending_actions
+                and player.id not in self._status_box_open
+                and player.id not in self._actions_menu_open
+            ):
+                self.rebuild_all_menus()
+
+    def _handle_actions_menu_selection(self, player: Player, action_id: str) -> None:
+        """Handle selection from the F5 actions menu."""
+        # Actions menu is no longer open
+        self._actions_menu_open.discard(player.id)
+        # Handle "go back" - just return to turn menu
+        if action_id == "go_back":
+            self.rebuild_player_menu(player)
+            return
+        action = self.find_action(player, action_id)
+        if action and action.enabled:
+            self.execute_action(player, action_id)
+        # Don't rebuild if action is waiting for input
+        if player.id not in self._pending_actions:
+            self.rebuild_player_menu(player)
+
+    # Lobby system
+
+    def destroy(self) -> None:
+        """Request destruction of this game/table."""
+        self._destroyed = True
+        if self._table:
+            self._table.destroy()
+
+    def create_lobby_action_set(self, player: Player) -> ActionSet:
+        """Create the lobby action set for a player."""
+        user = self.get_user(player)
+        locale = user.locale if user else "en"
+        is_spectator = player.is_spectator
+
+        action_set = ActionSet(name="lobby")
+        action_set.add(
+            Action(
+                id="start_game",
+                label=Localization.get(locale, "start-game"),
+                handler="_action_start_game",
+            )
+        )
+        action_set.add(
+            Action(
+                id="add_bot",
+                label=Localization.get(locale, "add-bot"),
+                handler="_action_add_bot",
+                hidden=True,  # Available via F5 and B key
+                input_request=EditboxInput(
+                    prompt="enter-bot-name",
+                    default="",
+                    bot_input="_bot_input_add_bot",
+                ),
+            )
+        )
+        action_set.add(
+            Action(
+                id="remove_bot",
+                label=Localization.get(locale, "remove-bot"),
+                handler="_action_remove_bot",
+                hidden=True,  # Available via F5 and Shift+B key
+            )
+        )
+        action_set.add(
+            Action(
+                id="toggle_spectator",
+                label=Localization.get(
+                    locale, "spectate" if not is_spectator else "play"
+                ),
+                handler="_action_toggle_spectator",
+                hidden=True,  # Hidden from turn menu, but keybindable via F3
+            )
+        )
+        action_set.add(
+            Action(
+                id="leave_game",
+                label=Localization.get(locale, "leave-table"),
+                handler="_action_leave_game",
+                hidden=True,  # Hidden from turn menu, but keybindable
+            )
+        )
+        return action_set
+
+    def create_standard_action_set(self, player: Player) -> ActionSet:
+        """Create the standard action set (F5, save) for a player."""
+        user = self.get_user(player)
+        locale = user.locale if user else "en"
+
+        action_set = ActionSet(name="standard")
+        action_set.add(
+            Action(
+                id="show_actions",
+                label=Localization.get(locale, "actions-menu"),
+                handler="_action_show_actions_menu",
+                hidden=True,  # Never in turn menu
+            )
+        )
+        action_set.add(
+            Action(
+                id="save_table",
+                label=Localization.get(locale, "save-table"),
+                handler="_action_save_table",
+                hidden=True,  # Hidden from menus
+            )
+        )
+
+        # Common status actions (available during play)
+        action_set.add(
+            Action(
+                id="whose_turn",
+                label=Localization.get(locale, "whose-turn"),
+                handler="_action_whose_turn",
+                hidden=True,
+            )
+        )
+        action_set.add(
+            Action(
+                id="check_scores",
+                label=Localization.get(locale, "check-scores"),
+                handler="_action_check_scores",
+                hidden=True,
+            )
+        )
+        action_set.add(
+            Action(
+                id="check_scores_detailed",
+                label=Localization.get(locale, "check-scores-detailed"),
+                handler="_action_check_scores_detailed",
+                hidden=True,
+            )
+        )
+
+        return action_set
+
+    def setup_keybinds(self) -> None:
+        """Define all keybinds for the game."""
+        # Lobby keybinds
+        self.define_keybind(
+            "enter", "Start game", ["start_game"], state=KeybindState.IDLE
+        )
+        self.define_keybind("b", "Add bot", ["add_bot"], state=KeybindState.IDLE)
+        self.define_keybind(
+            "shift+b", "Remove bot", ["remove_bot"], state=KeybindState.IDLE
+        )
+        self.define_keybind(
+            "f3",
+            "Toggle spectator",
+            ["toggle_spectator"],
+            state=KeybindState.IDLE,
+            include_spectators=True,
+        )
+        self.define_keybind(
+            "q",
+            "Leave table",
+            ["leave_game"],
+            state=KeybindState.ALWAYS,
+            include_spectators=True,
+        )
+        # Standard keybinds
+        self.define_keybind(
+            "escape",
+            "Actions menu",
+            ["show_actions"],
+            state=KeybindState.ALWAYS,
+            include_spectators=True,
+        )
+        self.define_keybind(
+            "ctrl+s", "Save table", ["save_table"], state=KeybindState.ALWAYS
+        )
+
+        # Status keybinds (during play)
+        self.define_keybind(
+            "t",
+            "Whose turn",
+            ["whose_turn"],
+            state=KeybindState.ACTIVE,
+            include_spectators=True,
+        )
+        self.define_keybind(
+            "s",
+            "Check scores",
+            ["check_scores"],
+            state=KeybindState.ACTIVE,
+            include_spectators=True,
+        )
+        self.define_keybind(
+            "shift+s",
+            "Detailed scores",
+            ["check_scores_detailed"],
+            state=KeybindState.ACTIVE,
+            include_spectators=True,
+        )
+
+    def create_turn_action_set(self, player: Player) -> ActionSet | None:
+        """Create the turn action set for a player.
+
+        Override in subclasses to add game-specific turn actions.
+        Returns None by default (no turn actions).
+        """
+        return None
+
+    def setup_player_actions(self, player: Player) -> None:
+        """Set up action sets for a player. Called when player joins."""
+        # Create and add action sets in order (first = appears first in menu)
+        # Turn actions first (if any), then lobby, options, standard
+        turn_set = self.create_turn_action_set(player)
+        if turn_set:
+            self.add_action_set(player, turn_set)
+
+        lobby_set = self.create_lobby_action_set(player)
+        self.add_action_set(player, lobby_set)
+
+        # Only add options if the game defines them
+        if hasattr(self, "options"):
+            options_set = self.create_options_action_set(player)
+            self.add_action_set(player, options_set)
+
+        standard_set = self.create_standard_action_set(player)
+        self.add_action_set(player, standard_set)
+
+        # Update action availability
+        self.update_lobby_actions(player)
+        if hasattr(self, "options"):
+            self.update_options_actions(player)
+        self.update_standard_actions(player)
+
+    def update_lobby_actions(self, player: Player) -> None:
+        """Update lobby action availability based on current state."""
+        lobby_set = self.get_action_set(player, "lobby")
+        standard_set = self.get_action_set(player, "standard")
+        if not lobby_set or not standard_set:
+            return
+
+        user = self.get_user(player)
+        locale = user.locale if user else "en"
+        is_host = player.name == self.host
+        is_spectator = player.is_spectator
+        in_waiting = self.status == "waiting"
+        active_count = self.get_active_player_count()
+        can_start = in_waiting and is_host and active_count >= self.get_min_players()
+        can_add_bot = (
+            in_waiting and is_host and len(self.players) < self.get_max_players()
+        )
+        can_remove_bot = in_waiting and is_host and any(p.is_bot for p in self.players)
+
+        # Enable/disable lobby actions
+        if can_start:
+            lobby_set.enable("start_game")
+        else:
+            lobby_set.disable("start_game")
+
+        if can_add_bot:
+            lobby_set.enable("add_bot")
+        else:
+            lobby_set.disable("add_bot")
+
+        if can_remove_bot:
+            lobby_set.enable("remove_bot")
+        else:
+            lobby_set.disable("remove_bot")
+
+        # Toggle spectator - enabled for non-bots before game starts
+        if in_waiting and not player.is_bot:
+            lobby_set.enable("toggle_spectator")
+            # Update label based on current spectator status
+            lobby_set.set_label(
+                "toggle_spectator",
+                Localization.get(locale, "spectate" if not is_spectator else "play"),
+            )
+        else:
+            lobby_set.disable("toggle_spectator")
+
+        # Leave game is always enabled
+        lobby_set.enable("leave_game")
+
+        # Standard actions
+        standard_set.enable("show_actions")
+        if is_host:
+            standard_set.enable("save_table")
+        else:
+            standard_set.disable("save_table")
+
+    def update_options_actions(self, player: Player) -> None:
+        """Update options action availability based on current state."""
+        options_set = self.get_action_set(player, "options")
+        if not options_set:
+            return
+
+        is_host = player.name == self.host
+        in_waiting = self.status == "waiting"
+        can_change_options = in_waiting and is_host
+
+        # Enable or disable all options based on host status and game state
+        for action_id in options_set._order:
+            if can_change_options:
+                options_set.enable(action_id)
+            else:
+                options_set.disable(action_id)
+
+    def update_all_options_actions(self) -> None:
+        """Update options actions for all players."""
+        for player in self.players:
+            self.update_options_actions(player)
+
+    def update_standard_actions(self, player: Player) -> None:
+        """Update standard action availability for a player."""
+        standard_set = self.get_action_set(player, "standard")
+        if not standard_set:
+            return
+
+        is_playing = self.status == "playing"
+
+        # Status actions: available during play if team_manager exists
+        has_team_manager = self.team_manager is not None
+        if is_playing:
+            standard_set.enable("whose_turn")
+            if has_team_manager:
+                standard_set.enable("check_scores", "check_scores_detailed")
+            else:
+                standard_set.disable("check_scores", "check_scores_detailed")
+        else:
+            standard_set.disable("whose_turn", "check_scores", "check_scores_detailed")
+
+    def update_all_standard_actions(self) -> None:
+        """Update standard actions for all players."""
+        for player in self.players:
+            self.update_standard_actions(player)
+
+    # Lobby action handlers
+
+    def _action_start_game(self, player: Player, action_id: str) -> None:
+        """Start the game."""
+        self.status = "playing"
+        self.broadcast_l("game-starting")
+        self.on_start()
+
+    def _bot_input_add_bot(self, player: Player) -> str | None:
+        """Get bot name for add_bot action."""
+        return next(
+            (
+                n
+                for n in BOT_NAMES
+                if n.lower() not in {x.name.lower() for x in self.players}
+            ),
+            None,
+        )
+
+    def _action_add_bot(self, player: Player, bot_name: str, action_id: str) -> None:
+        """Add a bot with the selected name."""
+        # If blank, use an available name from the list
+        if not bot_name.strip():
+            bot_name = next(
+                (
+                    n
+                    for n in BOT_NAMES
+                    if n.lower() not in {x.name.lower() for x in self.players}
+                ),
+                None,
+            )
+            if not bot_name:
+                # No names available
+                user = self.get_user(player)
+                if user:
+                    user.speak_l("no-bot-names-available")
+                return
+
+        bot_user = Bot(bot_name)
+        bot_player = self.create_player(bot_user.uuid, bot_name, is_bot=True)
+        self.players.append(bot_player)
+        self.attach_user(bot_player.id, bot_user)
+        # Set up action sets for the bot
+        self.setup_player_actions(bot_player)
+        self.broadcast_l("table-joined", player=bot_name)
+        # Update all players' lobby actions
+        self.update_all_lobby_actions()
+        self.rebuild_all_menus()
+
+    def _action_remove_bot(self, player: Player, action_id: str) -> None:
+        """Remove the last bot from the game."""
+        for i in range(len(self.players) - 1, -1, -1):
+            if self.players[i].is_bot:
+                bot = self.players.pop(i)
+                # Clean up action sets
+                self.player_action_sets.pop(bot.id, None)
+                self._users.pop(bot.id, None)
+                self.broadcast_l("table-left", player=bot.name)
+                break
+        # Update all players' lobby actions
+        self.update_all_lobby_actions()
+        self.rebuild_all_menus()
+
+    def _action_toggle_spectator(self, player: Player, action_id: str) -> None:
+        """Toggle spectator mode for a player."""
+        if self.status != "waiting":
+            return  # Can only toggle before game starts
+
+        player.is_spectator = not player.is_spectator
+        if player.is_spectator:
+            self.broadcast_l("now-spectating", player=player.name)
+        else:
+            self.broadcast_l("now-playing", player=player.name)
+
+        # Update all players' lobby actions (affects start_game availability)
+        self.update_all_lobby_actions()
+        self.rebuild_all_menus()
+
+    def _action_leave_game(self, player: Player, action_id: str) -> None:
+        """Leave the game."""
+        # Remove player and their action sets
+        self.players = [p for p in self.players if p.id != player.id]
+        self.player_action_sets.pop(player.id, None)
+        self._users.pop(player.id, None)
+
+        self.broadcast_l("table-left", player=player.name)
+
+        # Check if any humans remain
+        has_humans = any(not p.is_bot for p in self.players)
+        if not has_humans:
+            # Destroy the game - no humans left
+            self.destroy()
+            return
+
+        if self.status == "waiting":
+            # If host left, assign new host
+            if player.name == self.host and self.players:
+                # Find first human to be new host
+                for p in self.players:
+                    if not p.is_bot:
+                        self.host = p.name
+                        self.broadcast_l("new-host", player=p.name)
+                        break
+
+            # Update all players' lobby actions
+            self.update_all_lobby_actions()
+            self.update_all_options_actions()
+            self.rebuild_all_menus()
+
+    # F5 Actions Menu
+
+    def _action_show_actions_menu(self, player: Player, action_id: str) -> None:
+        """Show the F5 actions menu."""
+        items = []
+        for action in self.get_all_enabled_actions(player):
+            label = action.label
+            keybind_key = self._get_keybind_for_action(action.id)
+            if keybind_key:
+                label += f" ({keybind_key.upper()})"
+            items.append(MenuItem(text=label, id=action.id))
+
+        user = self.get_user(player)
+        if user and items:
+            # Add "Go back" option at the end
+            items.append(
+                MenuItem(text=Localization.get(user.locale, "go-back"), id="go_back")
+            )
+            self._actions_menu_open.add(player.id)
+            user.speak_l("context-menu")
+            user.show_menu(
+                "actions_menu",
+                items,
+                multiletter=True,
+                escape_behavior=EscapeBehavior.SELECT_LAST,
+            )
+        elif user:
+            user.speak_l("no-actions-available")
+
+    def _action_save_table(self, player: Player, action_id: str) -> None:
+        """Save the current table state (host only). This destroys the table."""
+        if self._table:
+            self._table.save_and_close(player.name)
+
+    def _action_whose_turn(self, player: Player, action_id: str) -> None:
+        """Announce whose turn it is."""
+        user = self.get_user(player)
+        if user:
+            current = self.current_player
+            if current:
+                user.speak_l("game-turn-start", player=current.name)
+            else:
+                user.speak_l("game-no-turn")
+
+    def _action_check_scores(self, player: Player, action_id: str) -> None:
+        """Announce scores briefly."""
+        user = self.get_user(player)
+        if not user:
+            return
+
+        tm = self.team_manager
+        if tm:
+            user.speak(tm.format_scores_brief(user.locale))
+        else:
+            user.speak_l("no-scores-available")
+
+    def _action_check_scores_detailed(self, player: Player, action_id: str) -> None:
+        """Show detailed scores in a status box."""
+        user = self.get_user(player)
+        if not user:
+            return
+
+        tm = self.team_manager
+        if tm:
+            lines = tm.format_scores_detailed(user.locale)
+            self.status_box(player, lines)
+        else:
+            self.status_box(player, ["No scores available."])
+
+    # Player helpers
+
+    def get_human_count(self) -> int:
+        """Get the number of human players."""
+        return sum(1 for p in self.players if not p.is_bot)
+
+    def get_bot_count(self) -> int:
+        """Get the number of bot players."""
+        return sum(1 for p in self.players if p.is_bot)
+
+    def create_player(self, player_id: str, name: str, is_bot: bool = False) -> Player:
+        """Create a new player. Override in subclasses for custom player types."""
+        return Player(id=player_id, name=name, is_bot=is_bot)
+
+    def add_player(self, name: str, user: User) -> Player:
+        """Add a player to the game."""
+        is_bot = hasattr(user, "is_bot") and user.is_bot
+        player = self.create_player(user.uuid, name, is_bot=is_bot)
+        self.players.append(player)
+        self.attach_user(player.id, user)
+        # Set up action sets for the new player
+        self.setup_player_actions(player)
+        return player
+
+    def initialize_lobby(self, host_name: str, host_user: User) -> None:
+        """Initialize the game in lobby mode with a host."""
+        self.host = host_name
+        self.status = "waiting"
+        self.setup_keybinds()
+        self.add_player(host_name, host_user)
+        # Update all player lobby actions (for host status changes)
+        self.update_all_lobby_actions()
+        self.rebuild_all_menus()
+
+    def update_all_lobby_actions(self) -> None:
+        """Update lobby action availability for all players."""
+        for player in self.players:
+            self.update_lobby_actions(player)
+
+    # Declarative options system support
+
+    def create_options_action_set(self, player: Player) -> ActionSet:
+        """Create the options action set for a player.
+
+        If the game's options class uses declarative options (option_field),
+        this will auto-generate the action set. Otherwise, subclasses should
+        override this method.
+        """
+        if hasattr(self.options, "create_options_action_set"):
+            return self.options.create_options_action_set(self, player)
+        # Fallback for non-declarative options
+        return ActionSet(name="options")
+
+    def _handle_option_change(self, option_name: str, value: str) -> None:
+        """Handle a declarative option change (for int/menu options).
+
+        This is called by auto-generated option actions.
+        No broadcast needed - screen readers speak the updated list item.
+        """
+        meta = get_option_meta(type(self.options), option_name)
+        if not meta:
+            return
+
+        success, converted = meta.validate_and_convert(value)
+        if not success:
+            return
+
+        # Set the option value
+        setattr(self.options, option_name, converted)
+
+        # Update labels and rebuild menus
+        if hasattr(self.options, "update_options_labels"):
+            self.options.update_options_labels(self)
+        self.rebuild_all_menus()
+
+    def _handle_option_toggle(self, option_name: str) -> None:
+        """Handle a declarative boolean option toggle.
+
+        This is called by auto-generated toggle actions.
+        No broadcast needed - screen readers speak the updated list item.
+        """
+        meta = get_option_meta(type(self.options), option_name)
+        if not meta:
+            return
+
+        # Toggle the value
+        current = getattr(self.options, option_name)
+        new_value = not current
+        setattr(self.options, option_name, new_value)
+
+        # Update labels and rebuild menus
+        if hasattr(self.options, "update_options_labels"):
+            self.options.update_options_labels(self)
+        self.rebuild_all_menus()
+
+    # Generic option action handlers (extract option_name from action_id)
+
+    def _action_set_option(self, player: Player, value: str, action_id: str) -> None:
+        """Generic handler for setting an option value.
+
+        Extracts the option name from action_id (e.g., "set_total_rounds" -> "total_rounds")
+        and delegates to _handle_option_change.
+        """
+        option_name = action_id.removeprefix("set_")
+        self._handle_option_change(option_name, value)
+
+    def _action_toggle_option(self, player: Player, action_id: str) -> None:
+        """Generic handler for toggling a boolean option.
+
+        Extracts the option name from action_id (e.g., "toggle_show_hints" -> "show_hints")
+        and delegates to _handle_option_toggle.
+        """
+        option_name = action_id.removeprefix("toggle_")
+        self._handle_option_toggle(option_name)

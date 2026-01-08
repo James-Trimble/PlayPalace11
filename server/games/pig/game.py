@@ -1,0 +1,449 @@
+"""
+Pig Game Implementation for PlayPalace v11.
+
+Classic dice game: roll or bank, but don't get a 1!
+Supports individual and team modes via TeamManager.
+"""
+
+from dataclasses import dataclass, field
+import random
+
+from ..base import Game, Player, GameOptions
+from ..registry import register_game
+from ...game_utils.actions import Action, ActionSet
+from ...game_utils.bot_helper import BotHelper
+from ...game_utils.options import IntOption, MenuOption, option_field
+from ...game_utils.teams import TeamManager
+from ...messages.localization import Localization
+from ...ui.keybinds import KeybindState
+
+
+@dataclass
+class PigPlayer(Player):
+    """Player state for Pig game."""
+
+    round_score: int = 0  # Score for current turn (lost on bust)
+
+
+@dataclass
+class PigOptions(GameOptions):
+    """Options for Pig game using declarative option system."""
+
+    target_score: int = option_field(
+        IntOption(
+            default=50,
+            min_val=10,
+            max_val=1000,
+            value_key="score",
+            label="game-set-target-score",
+            prompt="game-enter-target-score",
+            change_msg="game-option-changed-target",
+        )
+    )
+    min_bank_points: int = option_field(
+        IntOption(
+            default=0,
+            min_val=0,
+            max_val=50,
+            value_key="points",
+            label="pig-set-min-bank",
+            prompt="pig-enter-min-bank",
+            change_msg="pig-option-changed-min-bank",
+        )
+    )
+    dice_sides: int = option_field(
+        IntOption(
+            default=6,
+            min_val=4,
+            max_val=20,
+            value_key="sides",
+            label="pig-set-dice-sides",
+            prompt="pig-enter-dice-sides",
+            change_msg="pig-option-changed-dice",
+        )
+    )
+    team_mode: str = option_field(
+        MenuOption(
+            default="individual",
+            value_key="mode",
+            choices=lambda g, p: TeamManager.get_all_team_modes(2, 4),
+            label="game-set-team-mode",
+            prompt="game-select-team-mode",
+            change_msg="game-option-changed-team",
+        )
+    )
+
+
+@dataclass
+@register_game
+class PigGame(Game):
+    """
+    Pig dice game.
+
+    Players take turns rolling a die. Each roll adds to their round score,
+    but rolling a 1 loses all points for that round. Players can bank their
+    points at any time to add them to their total score and end their turn.
+    First player to reach the target score wins.
+    """
+
+    # Game-specific state - use PigPlayer list instead of Player
+    players: list[PigPlayer] = field(default_factory=list)
+    options: PigOptions = field(default_factory=PigOptions)
+    _team_manager: TeamManager = field(default_factory=TeamManager)
+
+    @property
+    def team_manager(self) -> TeamManager:
+        """Get the team manager for scoring."""
+        return self._team_manager
+
+    @classmethod
+    def get_name(cls) -> str:
+        return "Pig"
+
+    @classmethod
+    def get_type(cls) -> str:
+        return "pig"
+
+    @classmethod
+    def get_category(cls) -> str:
+        return "category-dice-games"
+
+    @classmethod
+    def get_min_players(cls) -> int:
+        return 2
+
+    @classmethod
+    def get_max_players(cls) -> int:
+        return 4
+
+    def create_player(
+        self, player_id: str, name: str, is_bot: bool = False
+    ) -> PigPlayer:
+        """Create a new player with Pig-specific state."""
+        return PigPlayer(id=player_id, name=name, is_bot=is_bot, round_score=0)
+
+    def create_turn_action_set(self, player: PigPlayer) -> ActionSet:
+        """Create the turn action set for a player."""
+        user = self.get_user(player)
+        locale = user.locale if user else "en"
+
+        action_set = ActionSet(name="turn")
+        action_set.add(
+            Action(
+                id="roll",
+                label=Localization.get(locale, "pig-roll"),
+                handler="_action_roll",
+            )
+        )
+        action_set.add(
+            Action(
+                id="bank",
+                label=Localization.get(locale, "pig-bank", points=0),
+                handler="_action_bank",
+            )
+        )
+        # Status actions (whose_turn, check_scores) are in base class standard set
+        return action_set
+
+    # Options are now defined declaratively in PigOptions - no need to override
+    # create_options_action_set as the base class handles it automatically
+
+    def setup_keybinds(self) -> None:
+        """Define all keybinds for the game."""
+        # Call parent for lobby/standard keybinds (includes t, s, shift+s)
+        super().setup_keybinds()
+
+        # Turn action keybinds
+        self.define_keybind("r", "Roll dice", ["roll"], state=KeybindState.ACTIVE)
+        self.define_keybind("b", "Bank points", ["bank"], state=KeybindState.ACTIVE)
+
+    def update_turn_actions(self, player: PigPlayer) -> None:
+        """Update turn action availability and labels for a player."""
+        turn_set = self.get_action_set(player, "turn")
+        if not turn_set:
+            return
+
+        user = self.get_user(player)
+        locale = user.locale if user else "en"
+        is_playing = self.status == "playing"
+        is_spectator = player.is_spectator
+        is_current = self.current_player == player
+
+        # Turn actions only for current active player (never for spectators)
+        if is_playing and is_current and not is_spectator:
+            turn_set.enable("roll")
+            # Bank depends on round score
+            min_required = max(1, self.options.min_bank_points)
+            if player.round_score >= min_required:
+                turn_set.enable("bank")
+                turn_set.show("bank")
+                turn_set.set_label(
+                    "bank",
+                    Localization.get(locale, "pig-bank", points=player.round_score),
+                )
+            else:
+                turn_set.disable("bank")
+                turn_set.hide("bank")
+        else:
+            turn_set.disable("roll", "bank")
+
+        # Also update standard actions (status keybinds)
+        self.update_standard_actions(player)
+
+    def update_all_turn_actions(self) -> None:
+        """Update turn actions for all players."""
+        for player in self.players:
+            self.update_turn_actions(player)
+
+    def _action_roll(self, player: Player, action_id: str) -> None:
+        """Handle roll action."""
+        pig_player = player
+
+        self.broadcast_l("pig-rolls", player=player.name)
+        self.play_sound("game_pig/roll.ogg")
+
+        # Jolt the rolling player to pause before next action
+        BotHelper.jolt_bot(player, ticks=random.randint(10, 20))
+
+        roll = random.randint(1, self.options.dice_sides)
+
+        if roll == 1:
+            # Bust!
+            self.play_sound("game_pig/lose.ogg")
+            self.broadcast_l(
+                "pig-bust", player=player.name, points=pig_player.round_score
+            )
+            pig_player.round_score = 0
+            self.end_turn()
+        else:
+            pig_player.round_score += roll
+            self.broadcast_l("pig-roll-result", roll=roll, total=pig_player.round_score)
+            # Update bank action visibility/label after round_score change
+            self.update_turn_actions(pig_player)
+            self.rebuild_player_menu(pig_player)
+
+    def _action_bank(self, player: Player, action_id: str) -> None:
+        """Handle bank action."""
+        pig_player = player
+
+        self.play_sound("game_pig/bank.ogg")
+        banked = pig_player.round_score
+
+        # Add to team score via TeamManager
+        self._team_manager.add_to_team_score(player.name, banked)
+        team = self._team_manager.get_team(player.name)
+        total = team.total_score if team else 0
+
+        pig_player.round_score = 0
+        self.broadcast_l(
+            "pig-bank-action", player=player.name, points=banked, total=total
+        )
+
+        self.end_turn()
+
+    def get_player_score(self, player: PigPlayer) -> int:
+        """Get a player's total score from TeamManager."""
+        team = self._team_manager.get_team(player.name)
+        return team.total_score if team else 0
+
+    # Options are now handled by the declarative system in GameOptions
+
+    def on_start(self) -> None:
+        """Called when the game starts."""
+        self.status = "playing"
+        self.game_active = True
+        self.round = 0
+
+        # Set up teams based on active players
+        active_players = self.get_active_players()
+        self._team_manager.team_mode = self.options.team_mode
+        self._team_manager.setup_teams([p.name for p in active_players])
+
+        # Initialize turn order
+        self.set_turn_players(active_players)
+
+        # Reset player round scores (total scores are in TeamManager)
+        for player in active_players:
+            player.round_score = 0
+
+        # Update action availability for game start
+        self.update_all_lobby_actions()
+        self.update_all_options_actions()
+        self.update_all_turn_actions()
+
+        # Play intro music
+        self.play_music("game_pig/mus.ogg")
+
+        # Start first round
+        self._start_round()
+
+    def _start_round(self) -> None:
+        """Start a new round."""
+        self.round += 1
+
+        # Refresh turn order with current active players (handles tiebreakers)
+        # and reset to first player for the new round
+        self.set_turn_players(self.get_active_players())
+
+        self.play_sound("game_pig/roundstart.ogg")
+        self.broadcast_l("game-round-start", round=self.round)
+
+        self._start_turn()
+
+    def _start_turn(self) -> None:
+        """Start a player's turn."""
+        player = self.current_player
+        if not player:
+            return
+
+        player.round_score = 0
+
+        # Announce turn (plays sound and broadcasts message)
+        self.announce_turn()
+
+        # Set up bot target if this is a bot's turn
+        # (bots are already jolted at end of previous turn)
+        if player.is_bot:
+            self._setup_bot_target(player)
+
+        # Update action availability for new turn
+        self.update_all_turn_actions()
+        self.rebuild_all_menus()
+
+    def _setup_bot_target(self, player: Player) -> None:
+        """Set up the bot's target score for this turn."""
+        # Base target: random between 10-25
+        target = random.randint(10, 25)
+
+        # Check if anyone is close to winning or has won (active players only)
+        active_players = self.get_active_players()
+        someone_hit_threshold = False
+        highest_score = 0
+        my_score = self.get_player_score(player)
+
+        for other in active_players:
+            if other != player:
+                other_score = self.get_player_score(other)
+                if other_score >= self.options.target_score:
+                    someone_hit_threshold = True
+                    highest_score = max(highest_score, other_score)
+                elif other_score >= self.options.target_score - 1:
+                    highest_score = max(highest_score, other_score)
+
+        if someone_hit_threshold:
+            # Need to beat the highest score
+            target = highest_score + 1 - my_score
+        elif highest_score > 0:
+            # Someone close, try to beat them
+            target = highest_score + 1 - my_score
+
+        # If bot is close to winning, can relax
+        if (my_score + player.round_score) >= (
+            self.options.target_score - 1
+        ) and not someone_hit_threshold:
+            can_relax = True
+            for other in active_players:
+                if other != player:
+                    other_score = self.get_player_score(other)
+                    if other_score > (my_score + player.round_score - 8):
+                        can_relax = False
+                        break
+            if can_relax:
+                target = 0
+
+        BotHelper.set_target(player, max(0, target))
+
+    def on_tick(self) -> None:
+        """Called every tick. Handle bot AI."""
+        if not self.game_active:
+            return
+
+        # Ensure bot target is set up (needed after reload)
+        player = self.current_player
+        if player and player.is_bot and BotHelper.get_target(player) is None:
+            self._setup_bot_target(player)
+
+        BotHelper.on_tick(self)
+
+    def bot_think(self, player: PigPlayer) -> str | None:
+        """Bot AI decision making. Called by BotHelper."""
+        target = BotHelper.get_target(player)
+        if target is None:
+            target = 15  # Default fallback
+
+        # Decide: bank or roll?
+        min_bank = max(1, self.options.min_bank_points)
+        if player.round_score >= target and player.round_score >= min_bank:
+            return "bank"
+        else:
+            return "roll"
+
+    def _on_turn_end(self) -> None:
+        """Handle end of a player's turn."""
+        # Check if round is over (all active players have gone)
+        if self.turn_index >= len(self.turn_players) - 1:
+            self._on_round_end()
+        else:
+            # Next player (don't announce yet, _start_turn will do it)
+            self.advance_turn(announce=False)
+            self._start_turn()
+
+    def _on_round_end(self) -> None:
+        """Handle end of a round."""
+        # Check for winners (only among active players)
+        active_players = self.get_active_players()
+        winners = []
+        high_score = 0
+
+        for player in active_players:
+            score = self.get_player_score(player)
+            if score >= self.options.target_score:
+                if score > high_score:
+                    winners = [player]
+                    high_score = score
+                elif score == high_score:
+                    winners.append(player)
+
+        if len(winners) == 1:
+            # Single winner!
+            self.play_sound("game_pig/win.ogg")
+            self.broadcast_l("pig-winner", player=winners[0].name)
+            self.finish_game()
+            if not self._destroyed:
+                self._on_game_end()
+        elif len(winners) > 1:
+            # Tiebreaker! Start immediately (no delay)
+            names = [w.name for w in winners]
+            # Format list with locale-aware "and"
+            for player in self.players:
+                user = self.get_user(player)
+                if user:
+                    names_str = Localization.format_list_and(user.locale, names)
+                    user.speak_l("game-tiebreaker-players", players=names_str)
+
+            # Mark non-winners as spectators for the tiebreaker
+            winner_names = [w.name for w in winners]
+            for p in active_players:
+                if p.name not in winner_names:
+                    p.is_spectator = True
+            self._start_round()
+        else:
+            # No winner yet, continue to next round
+            self._start_round()
+
+    def _on_game_end(self) -> None:
+        """Handle game ending - show final scores and cleanup."""
+        sorted_teams = self._team_manager.get_sorted_teams(
+            by_score=True, descending=True
+        )
+        lines = ["Final Scores:"]
+        for i, team in enumerate(sorted_teams, 1):
+            name = self._team_manager.get_team_name(team)
+            lines.append(f"{i}. {name}: {team.total_score} points")
+        self.show_game_end_menu(lines)
+
+    def end_turn(self, jolt_min: int = 20, jolt_max: int = 30) -> None:
+        """Override to use Pig's turn advancement logic."""
+        # Jolt all bots to pause for the turn change
+        BotHelper.jolt_bots(self, ticks=random.randint(jolt_min, jolt_max))
+        self._on_turn_end()

@@ -1,0 +1,33 @@
+[project]
+name = "playpalace-server"
+version = "11.0.0"
+description = "PlayPalace v11 Game Server"
+readme = "plans/overview.md"
+requires-python = ">=3.11"
+dependencies = [
+    "websockets>=12.0",
+    "mashumaro>=3.11",
+    "fluent-compiler>=1.0",
+    "babel>=2.14",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+playpalace-server = "server.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = [".."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
