@@ -13,6 +13,7 @@ from ..registry import register_game
 from ...game_utils.actions import Action, ActionSet
 from ...game_utils.bot_helper import BotHelper
 from ...game_utils.dice import DiceSet
+from ...game_utils.dice_game_mixin import DiceGameMixin
 from ...game_utils.options import IntOption, option_field
 from ...messages.localization import Localization
 from ...ui.keybinds import KeybindState
@@ -208,7 +209,7 @@ class YahtzeeOptions(GameOptions):
 
 @dataclass
 @register_game
-class YahtzeeGame(Game):
+class YahtzeeGame(Game, DiceGameMixin):
     """
     Yahtzee dice game.
 
@@ -268,15 +269,7 @@ class YahtzeeGame(Game):
         )
 
         # Dice toggle actions (1-5 keys) - shown after first roll
-        for i in range(5):
-            action_set.add(
-                Action(
-                    id=f"toggle_die_{i}",
-                    label=f"Die {i + 1}",
-                    handler=f"_action_toggle_die_{i}",
-                    hidden=True,
-                )
-            )
+        self.add_dice_toggle_actions(action_set)
 
         # Scoring category actions
         for cat in ALL_CATEGORIES:
@@ -316,14 +309,8 @@ class YahtzeeGame(Game):
         # Roll
         self.define_keybind("r", "Roll dice", ["roll"], state=KeybindState.ACTIVE)
 
-        # Toggle dice (1-5 keys)
-        for i in range(5):
-            self.define_keybind(
-                str(i + 1),
-                f"Toggle die {i + 1}",
-                [f"toggle_die_{i}"],
-                state=KeybindState.ACTIVE,
-            )
+        # Toggle dice (1-5 keys) - from DiceGameMixin
+        self.setup_dice_keybinds()
 
         # View actions
         self.define_keybind(
@@ -381,20 +368,15 @@ class YahtzeeGame(Game):
                 turn_set.hide("roll")
 
             # Toggle die actions - show when dice have been rolled
-            for i in range(5):
-                action_id = f"toggle_die_{i}"
-                if has_rolled and can_roll:
-                    turn_set.show(action_id)
-                    turn_set.enable(action_id)
-                    # Update label based on kept state
-                    die_val = player.dice.get_value(i)
-                    if player.dice.is_kept(i):
-                        turn_set.set_label(action_id, f"{die_val} (kept)")
-                    else:
-                        turn_set.set_label(action_id, str(die_val))
-                else:
-                    turn_set.hide(action_id)
-                    turn_set.disable(action_id)
+            if has_rolled and can_roll:
+                for i in range(5):
+                    turn_set.show(f"toggle_die_{i}")
+                    turn_set.enable(f"toggle_die_{i}")
+                self.update_dice_action_labels(player, turn_set)
+            else:
+                for i in range(5):
+                    turn_set.hide(f"toggle_die_{i}")
+                    turn_set.disable(f"toggle_die_{i}")
 
             # Scoring actions - only after rolling, and only open categories
             open_cats = player.get_open_categories()
@@ -449,8 +431,10 @@ class YahtzeeGame(Game):
 
         # Roll the dice:
         # - lock_kept=False: kept dice don't become permanently locked
-        # - clear_kept=True: kept dice become unkept after rolling (can re-keep)
-        ytz_player.dice.roll(lock_kept=False, clear_kept=True)
+        # - clear_kept: controlled by user preference (default True)
+        user = self.get_user(player)
+        clear_kept = user.preferences.clear_kept_on_roll if user else True
+        ytz_player.dice.roll(lock_kept=False, clear_kept=clear_kept)
         ytz_player.rolls_left -= 1
 
         # Announce roll (v10 style: "You rolled: X. Rolls remaining: Y")
@@ -475,48 +459,6 @@ class YahtzeeGame(Game):
 
         self.update_all_turn_actions()
         self.rebuild_all_menus()
-
-    # Individual die toggle handlers (dispatched by string name)
-    def _action_toggle_die_0(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 0)
-
-    def _action_toggle_die_1(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 1)
-
-    def _action_toggle_die_2(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 2)
-
-    def _action_toggle_die_3(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 3)
-
-    def _action_toggle_die_4(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 4)
-
-    def _toggle_die(self, player: Player, die_index: int) -> None:
-        """Toggle keeping a die."""
-        if not isinstance(player, YahtzeePlayer):
-            return
-
-        user = self.get_user(player)
-        result = player.dice.toggle_keep(die_index)
-
-        if result is None:
-            # Die is somehow locked (shouldn't happen in Yahtzee)
-            return
-
-        die_val = player.dice.get_value(die_index)
-        if result:
-            # Now kept
-            if user:
-                user.speak_l("yahtzee-keeping-die", value=die_val)
-        else:
-            # Now unkept
-            if user:
-                user.speak_l("yahtzee-rerolling-die", value=die_val)
-
-        self.update_all_turn_actions()
-        # Update menu with selection_id to keep focus on the same die
-        self.update_player_menu(player, selection_id=f"toggle_die_{die_index}")
 
     def _action_score(self, player: Player, action_id: str) -> None:
         """Handle scoring in a category."""
@@ -857,6 +799,8 @@ class YahtzeeGame(Game):
 
     def on_tick(self) -> None:
         """Called every tick."""
+        super().on_tick()
+
         if not self.game_active:
             return
         BotHelper.on_tick(self)

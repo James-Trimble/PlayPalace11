@@ -14,10 +14,7 @@ threes-you-rolled = You rolled: { $dice }
 threes-player-rolled = { $player } rolled: { $dice }
 threes-must-keep = You must keep at least one die before rolling again.
 
-# Keeping dice
-threes-keeping-die = Keeping { $value }.
-threes-rerolling-die = Rerolling { $value }.
-threes-die-locked = That die is locked and cannot be changed.
+# Dice status (keeping messages now in games.ftl)
 threes-no-dice-yet = You haven't rolled yet.
 threes-your-dice = Your dice: { $dice }
 

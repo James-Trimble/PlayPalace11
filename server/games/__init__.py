@@ -12,6 +12,8 @@ from .milebymile.game import MileByMileGame
 from .chaosbear.game import ChaosBearGame
 from .farkle.game import FarkleGame
 from .yahtzee.game import YahtzeeGame
+from .ninetynine.game import NinetyNineGame
+from .tradeoff.game import TradeoffGame
 
 __all__ = [
     "Game",
@@ -26,4 +28,6 @@ __all__ = [
     "ChaosBearGame",
     "FarkleGame",
     "YahtzeeGame",
+    "NinetyNineGame",
+    "TradeoffGame",
 ]

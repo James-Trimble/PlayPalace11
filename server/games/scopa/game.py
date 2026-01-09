@@ -710,6 +710,8 @@ class ScopaGame(Game):
 
     def on_tick(self) -> None:
         """Called every tick. Handle bot AI and round timer."""
+        super().on_tick()
+
         if not self.game_active:
             return
         # Tick round timer

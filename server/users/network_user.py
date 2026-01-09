@@ -3,6 +3,7 @@
 from typing import Any, TYPE_CHECKING
 
 from .base import User, MenuItem, EscapeBehavior, generate_uuid
+from .preferences import UserPreferences
 
 if TYPE_CHECKING:
     from ..network.websocket_server import ClientConnection
@@ -21,11 +22,13 @@ class NetworkUser(User):
         locale: str,
         connection: "ClientConnection",
         uuid: str | None = None,
+        preferences: UserPreferences | None = None,
     ):
         self._uuid = uuid or generate_uuid()
         self._username = username
         self._locale = locale
         self._connection = connection
+        self._preferences = preferences or UserPreferences()
         self._message_queue: list[dict[str, Any]] = []
 
         # Track current UI state for session resumption
@@ -48,6 +51,14 @@ class NetworkUser(User):
     def set_locale(self, locale: str) -> None:
         """Set the user's locale."""
         self._locale = locale
+
+    @property
+    def preferences(self) -> UserPreferences:
+        return self._preferences
+
+    def set_preferences(self, preferences: UserPreferences) -> None:
+        """Set the user's preferences."""
+        self._preferences = preferences
 
     @property
     def connection(self) -> "ClientConnection":

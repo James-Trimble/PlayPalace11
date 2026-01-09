@@ -1,6 +1,9 @@
 # Shared game messages for PlayPalace
 # These messages are common across multiple games
 
+# Game names
+game-name-ninetynine = Ninety Nine
+
 # Round and turn flow
 game-round-start = Round { $round }.
 game-round-end = Round { $round } complete.
@@ -42,6 +45,11 @@ game-leave = Leave game
 round-timer-paused = { $player } has paused the game (press p to start the next round).
 round-timer-resumed = Round timer resumed.
 round-timer-countdown = Next round in { $seconds }...
+
+# Dice games - keeping/releasing dice
+dice-keeping = Keeping { $value }.
+dice-rerolling = Rerolling { $value }.
+dice-locked = That die is locked and cannot be changed.
 
 # Dealing (card games)
 game-deal-counter = Deal { $current }/{ $total }.

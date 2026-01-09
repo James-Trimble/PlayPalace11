@@ -3,10 +3,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid as uuid_module
 
 from ..messages.localization import Localization
+
+if TYPE_CHECKING:
+    from .preferences import UserPreferences
 
 
 class EscapeBehavior(Enum):
@@ -56,6 +59,13 @@ class User(ABC):
     def locale(self) -> str:
         """The user's locale for localization (e.g., 'en', 'es')."""
         ...
+
+    @property
+    def preferences(self) -> "UserPreferences":
+        """The user's preferences. Returns defaults if not overridden."""
+        from .preferences import UserPreferences
+
+        return UserPreferences()
 
     @abstractmethod
     def speak(self, text: str, buffer: str = "misc") -> None:

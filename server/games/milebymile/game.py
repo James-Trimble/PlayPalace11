@@ -1787,6 +1787,8 @@ class MileByMileGame(Game):
 
     def on_tick(self) -> None:
         """Called every tick."""
+        super().on_tick()
+
         if not self.game_active:
             return
 

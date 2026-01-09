@@ -12,13 +12,29 @@ from mashumaro.mixins.json import DataClassJSONMixin
 from ..messages.localization import Localization
 
 
+# Suit constants
+SUIT_NONE = 0  # For games with no suits (e.g., RS Games Ninety-Nine)
+SUIT_DIAMONDS = 1
+SUIT_CLUBS = 2
+SUIT_HEARTS = 3
+SUIT_SPADES = 4
+
+# RS Games special card ranks (for Ninety-Nine RS Games variant)
+RS_RANK_PLUS_10 = 14
+RS_RANK_MINUS_10 = 15
+RS_RANK_PASS = 16
+RS_RANK_REVERSE = 17
+RS_RANK_SKIP = 18
+RS_RANK_NINETY_NINE = 19
+
+
 @dataclass
 class Card(DataClassJSONMixin):
     """A playing card."""
 
     id: int  # Unique identifier
-    rank: int  # Card rank (1-13 for standard, 1-10 for Italian)
-    suit: int  # Suit number (1=diamonds, 2=clubs, 3=hearts, 4=spades)
+    rank: int  # Card rank (1-13 for standard, 1-10 for Italian, 14-19 for RS Games special)
+    suit: int  # Suit number (0=none, 1=diamonds, 2=clubs, 3=hearts, 4=spades)
 
     def __hash__(self) -> int:
         return self.id
@@ -127,6 +143,50 @@ class DeckFactory:
         deck.shuffle()
         return deck, card_lookup
 
+    @staticmethod
+    def rs_games_deck() -> tuple[Deck, dict[int, Card]]:
+        """
+        Create RS Games 60-card deck for Ninety-Nine variant.
+
+        Contains:
+        - Number cards 1-9: 4 of each (36 cards)
+        - Special cards: +10, -10, Pass, Reverse, Skip, Ninety-Nine (4 of each, 24 cards)
+
+        Returns:
+            Tuple of (shuffled deck, card lookup dict mapping id -> Card)
+        """
+        cards = []
+        card_lookup: dict[int, Card] = {}
+        card_id = 0
+
+        # Number cards 1-9 (4 of each = 36 cards)
+        for rank in range(1, 10):
+            for _ in range(4):
+                card = Card(id=card_id, rank=rank, suit=SUIT_NONE)
+                cards.append(card)
+                card_lookup[card_id] = card
+                card_id += 1
+
+        # Special cards (4 of each = 24 cards)
+        # 14=+10, 15=-10, 16=Pass, 17=Reverse, 18=Skip, 19=Ninety Nine
+        for rank in [
+            RS_RANK_PLUS_10,
+            RS_RANK_MINUS_10,
+            RS_RANK_PASS,
+            RS_RANK_REVERSE,
+            RS_RANK_SKIP,
+            RS_RANK_NINETY_NINE,
+        ]:
+            for _ in range(4):
+                card = Card(id=card_id, rank=rank, suit=SUIT_NONE)
+                cards.append(card)
+                card_lookup[card_id] = card
+                card_id += 1
+
+        deck = Deck(cards=cards)
+        deck.shuffle()
+        return deck, card_lookup
+
 
 # Suit localization keys
 SUIT_KEYS = {
@@ -136,7 +196,7 @@ SUIT_KEYS = {
     4: "suit-spades",
 }
 
-# Rank localization keys (1-13)
+# Rank localization keys (1-13 for standard decks)
 RANK_KEYS = {
     1: "rank-ace",
     2: "rank-two",
@@ -153,19 +213,43 @@ RANK_KEYS = {
     13: "rank-king",
 }
 
+# RS Games special card names (not localized - they're game-specific terms)
+RS_GAMES_RANK_NAMES = {
+    1: "1",
+    2: "2",
+    3: "3",
+    4: "4",
+    5: "5",
+    6: "6",
+    7: "7",
+    8: "8",
+    9: "9",
+    RS_RANK_PLUS_10: "10",
+    RS_RANK_MINUS_10: "-10",
+    RS_RANK_PASS: "Pass",
+    RS_RANK_REVERSE: "Reverse",
+    RS_RANK_SKIP: "Skip",
+    RS_RANK_NINETY_NINE: "Ninety Nine",
+}
 
-def card_name(card: Card, locale: str = "en", italian: bool = True) -> str:
+
+def card_name(card: Card, locale: str = "en") -> str:
     """
     Get localized card name (e.g., 'Seven of Diamonds').
+
+    For RS Games cards (suit == SUIT_NONE), returns the special card name directly.
 
     Args:
         card: The card to name.
         locale: Locale for localization.
-        italian: If True, use Italian deck ranks (1-10). Otherwise standard (1-13).
 
     Returns:
         Localized card name string.
     """
+    # RS Games cards have no suit and use special naming
+    if card.suit == SUIT_NONE:
+        return RS_GAMES_RANK_NAMES.get(card.rank, str(card.rank))
+
     rank_key = RANK_KEYS.get(card.rank)
     suit_key = SUIT_KEYS.get(card.suit)
 
@@ -173,6 +257,24 @@ def card_name(card: Card, locale: str = "en", italian: bool = True) -> str:
     suit_name = Localization.get(locale, suit_key) if suit_key else str(card.suit)
 
     return Localization.get(locale, "card-name", rank=rank_name, suit=suit_name)
+
+
+def card_name_with_article(card: Card, locale: str = "en") -> str:
+    """
+    Get card name with article (a/an).
+
+    Args:
+        card: The card to name.
+        locale: Locale for localization.
+
+    Returns:
+        Card name with appropriate article (e.g., 'an Ace of Hearts').
+    """
+    name = card_name(card, locale)
+    # Words starting with vowel sounds use 'an' (8 sounds like "eight")
+    if name[0].lower() in "aeiou8":
+        return f"an {name}"
+    return f"a {name}"
 
 
 def card_name_short(card: Card) -> str:
@@ -185,6 +287,10 @@ def card_name_short(card: Card) -> str:
     Returns:
         Short card name string.
     """
+    # RS Games cards have no suit
+    if card.suit == SUIT_NONE:
+        return RS_GAMES_RANK_NAMES.get(card.rank, str(card.rank))
+
     suit_chars = {1: "D", 2: "C", 3: "H", 4: "S"}
     rank_chars = {1: "A", 11: "J", 12: "Q", 13: "K"}
     rank_str = rank_chars.get(card.rank, str(card.rank))
@@ -192,21 +298,20 @@ def card_name_short(card: Card) -> str:
     return f"{rank_str}{suit_str}"
 
 
-def read_cards(cards: list[Card], locale: str = "en", italian: bool = True) -> str:
+def read_cards(cards: list[Card], locale: str = "en") -> str:
     """
     Format a list of cards for speech output.
 
     Args:
         cards: List of cards to read.
         locale: Locale for localization.
-        italian: If True, use Italian deck ranks (1-10).
 
     Returns:
         Formatted string with card names joined by 'and'.
     """
     if not cards:
         return Localization.get(locale, "no-cards")
-    names = [card_name(c, locale, italian) for c in cards]
+    names = [card_name(c, locale) for c in cards]
     return Localization.format_list_and(locale, names)
 
 

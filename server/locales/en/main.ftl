@@ -33,6 +33,9 @@ whose-turn = Whose turn
 check-scores = Check scores
 check-scores-detailed = Detailed scores
 
+# Turn messages
+game-player-skipped = { $player } is skipped.
+
 # Table messages
 table-created = { $host } created a new { $game } table.
 table-joined = { $player } joined the table.
@@ -60,6 +63,18 @@ language-english = English
 language-option = Language: { $language }
 language-changed = Language set to { $language }.
 
+# Boolean option states
+option-on = On
+option-off = Off
+
+# Sound options
+turn-sound-option = Turn sound: { $status }
+
+# Dice options
+clear-kept-option = Clear kept dice when rolling: { $status }
+dice-keeping-style-option = Dice keeping style: { $style }
+dice-keeping-style-changed = Dice keeping style set to { $style }.
+
 # Bot names
 cancel = Cancel
 no-bot-names-available = No bot names available.
@@ -67,6 +82,13 @@ select-bot-name = Select a name for the bot
 enter-bot-name = Enter bot name
 no-options-available = No options available.
 no-scores-available = No scores available.
+
+# Duration estimation
+estimate-duration = Estimate duration
+estimate-computing = Computing estimated game duration...
+estimate-result = Bot average: { $bot_time } (± { $std_dev }). { $outlier_info }Estimated human time: { $human_time }.
+estimate-error = Could not estimate duration.
+estimate-already-running = Duration estimation already in progress.
 
 # Save/Restore
 saved-tables = Saved Tables

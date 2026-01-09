@@ -16,6 +16,7 @@ class UserRecord:
     username: str
     password_hash: str
     locale: str = "en"
+    preferences_json: str = "{}"
 
 
 @dataclass
@@ -64,9 +65,18 @@ class Database:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                locale TEXT DEFAULT 'en'
+                locale TEXT DEFAULT 'en',
+                preferences_json TEXT DEFAULT '{}'
             )
         """)
+
+        # Migration: Add preferences_json column if it doesn't exist
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "preferences_json" not in columns:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN preferences_json TEXT DEFAULT '{}'"
+            )
 
         # Tables table (game tables)
         cursor.execute("""
@@ -101,7 +111,7 @@ class Database:
         """Get a user by username."""
         cursor = self._conn.cursor()
         cursor.execute(
-            "SELECT id, username, password_hash, locale FROM users WHERE username = ?",
+            "SELECT id, username, password_hash, locale, preferences_json FROM users WHERE username = ?",
             (username,),
         )
         row = cursor.fetchone()
@@ -111,6 +121,7 @@ class Database:
                 username=row["username"],
                 password_hash=row["password_hash"],
                 locale=row["locale"] or "en",
+                preferences_json=row["preferences_json"] or "{}",
             )
         return None
 
@@ -142,6 +153,15 @@ class Database:
         cursor = self._conn.cursor()
         cursor.execute(
             "UPDATE users SET locale = ? WHERE username = ?", (locale, username)
+        )
+        self._conn.commit()
+
+    def update_user_preferences(self, username: str, preferences_json: str) -> None:
+        """Update a user's preferences."""
+        cursor = self._conn.cursor()
+        cursor.execute(
+            "UPDATE users SET preferences_json = ? WHERE username = ?",
+            (preferences_json, username),
         )
         self._conn.commit()
 

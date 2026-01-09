@@ -151,7 +151,7 @@ class GameSimulator:
         options: dict[str, Any],
         json_mode: bool = False,
         quiet: bool = False,
-        max_ticks: int = 10000,
+        max_ticks: int = 10000000,
         test_serialization: bool = False,
     ):
         self.game_type = game_type
@@ -200,13 +200,14 @@ class GameSimulator:
             for key, value in self.options.items():
                 if hasattr(self.game.options, key):
                     # Convert value to appropriate type
+                    # Note: Check bool before int because bool is a subclass of int
                     current = getattr(self.game.options, key)
-                    if isinstance(current, int):
+                    if isinstance(current, bool):
+                        value = value.lower() in ("true", "1", "yes")
+                    elif isinstance(current, int):
                         value = int(value)
                     elif isinstance(current, float):
                         value = float(value)
-                    elif isinstance(current, bool):
-                        value = value.lower() in ("true", "1", "yes")
                     setattr(self.game.options, key, value)
                 elif not self.json_mode:
                     print(f"Warning: Unknown option '{key}' for {self.game_type}")
@@ -522,8 +523,8 @@ def main():
     sim_parser.add_argument(
         "--max-ticks",
         type=int,
-        default=10000,
-        help="Maximum ticks before timeout (default: 10000)",
+        default=10000000,
+        help="Maximum ticks before timeout (default: 10000000)",
     )
     sim_parser.add_argument(
         "--test-serialization",

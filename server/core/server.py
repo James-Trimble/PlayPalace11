@@ -3,6 +3,8 @@
 import asyncio
 from pathlib import Path
 
+import json
+
 from .tick import TickScheduler
 from ..network.websocket_server import WebSocketServer, ClientConnection
 from ..persistence.database import Database
@@ -10,6 +12,7 @@ from ..auth.auth import AuthManager
 from ..tables.manager import TableManager
 from ..users.network_user import NetworkUser
 from ..users.base import MenuItem, EscapeBehavior
+from ..users.preferences import UserPreferences, DiceKeepingStyle
 from ..games.registry import GameRegistry, get_game_class
 from ..messages.localization import Localization
 
@@ -123,14 +126,14 @@ class Server:
                 table.game = game
                 game._table = table
 
-                # Setup keybinds and player actions
+                # Setup keybinds (runtime only, not serialized)
                 game.setup_keybinds()
+                # Attach bots (humans will be attached when they reconnect)
+                # Action sets are already restored from serialization
                 for player in game.players:
-                    game.setup_player_actions(player)
-                    # Attach bots (humans will be attached when they reconnect)
                     if player.is_bot:
                         bot_user = Bot(player.name)
-                        game.attach_user(player.name, bot_user)
+                        game.attach_user(player.id, bot_user)
 
         print(f"Loaded {len(tables)} tables from database.")
 
@@ -217,10 +220,17 @@ class Server:
         client.username = username
         client.authenticated = True
 
-        # Create network user
+        # Create network user with preferences
         user_record = self._auth.get_user(username)
         locale = user_record.locale if user_record else "en"
-        user = NetworkUser(username, locale, client)
+        preferences = UserPreferences()
+        if user_record and user_record.preferences_json:
+            try:
+                prefs_data = json.loads(user_record.preferences_json)
+                preferences = UserPreferences.from_dict(prefs_data)
+            except (json.JSONDecodeError, KeyError):
+                pass  # Use defaults on error
+        user = NetworkUser(username, locale, client, preferences=preferences)
         self._users[username] = user
 
         # Send success response
@@ -247,17 +257,17 @@ class Server:
 
             # Attach user to table and game
             table.attach_user(username, user)
-            game.attach_user(username, user)
-
-            # Set user state so menu selections are handled correctly
-            self._user_states[username] = {
-                "menu": "in_game",
-                "table_id": table.table_id,
-            }
-
-            # Rebuild menu for this player
             player = game.get_player_by_name(username)
             if player:
+                game.attach_user(player.id, user)
+
+                # Set user state so menu selections are handled correctly
+                self._user_states[username] = {
+                    "menu": "in_game",
+                    "table_id": table.table_id,
+                }
+
+                # Rebuild menu for this player
                 game.rebuild_player_menu(player)
         else:
             # Show main menu
@@ -397,15 +407,58 @@ class Server:
             "game_name": game_name,
         }
 
+    # Dice keeping style display names
+    DICE_KEEPING_STYLES = {
+        DiceKeepingStyle.PLAYPALACE: "PlayPalace style",
+        DiceKeepingStyle.QUENTIN_C: "Quentin C style",
+    }
+
     def _show_options_menu(self, user: NetworkUser) -> None:
         """Show options menu."""
         current_lang = self.LANGUAGES.get(user.locale, "English")
+        prefs = user.preferences
+
+        # Turn sound option
+        turn_sound_status = Localization.get(
+            user.locale,
+            "option-on" if prefs.play_turn_sound else "option-off",
+        )
+
+        # Clear kept dice option
+        clear_kept_status = Localization.get(
+            user.locale,
+            "option-on" if prefs.clear_kept_on_roll else "option-off",
+        )
+
+        # Dice keeping style option
+        dice_style_name = self.DICE_KEEPING_STYLES.get(
+            prefs.dice_keeping_style, "PlayPalace style"
+        )
+
         items = [
             MenuItem(
                 text=Localization.get(
                     user.locale, "language-option", language=current_lang
                 ),
                 id="language",
+            ),
+            MenuItem(
+                text=Localization.get(
+                    user.locale, "turn-sound-option", status=turn_sound_status
+                ),
+                id="turn_sound",
+            ),
+            MenuItem(
+                text=Localization.get(
+                    user.locale, "clear-kept-option", status=clear_kept_status
+                ),
+                id="clear_kept",
+            ),
+            MenuItem(
+                text=Localization.get(
+                    user.locale, "dice-keeping-style-option", style=dice_style_name
+                ),
+                id="dice_keeping_style",
             ),
             MenuItem(text=Localization.get(user.locale, "back"), id="back"),
         ]
@@ -522,6 +575,8 @@ class Server:
             await self._handle_options_selection(user, selection_id)
         elif current_menu == "language_menu":
             await self._handle_language_selection(user, selection_id)
+        elif current_menu == "dice_keeping_style_menu":
+            await self._handle_dice_keeping_style_selection(user, selection_id)
         elif current_menu == "saved_tables_menu":
             await self._handle_saved_tables_selection(user, selection_id, state)
         elif current_menu == "saved_table_actions_menu":
@@ -547,8 +602,59 @@ class Server:
         """Handle options menu selection."""
         if selection_id == "language":
             self._show_language_menu(user)
+        elif selection_id == "turn_sound":
+            # Toggle turn sound
+            prefs = user.preferences
+            prefs.play_turn_sound = not prefs.play_turn_sound
+            self._save_user_preferences(user)
+            self._show_options_menu(user)
+        elif selection_id == "clear_kept":
+            # Toggle clear kept on roll
+            prefs = user.preferences
+            prefs.clear_kept_on_roll = not prefs.clear_kept_on_roll
+            self._save_user_preferences(user)
+            self._show_options_menu(user)
+        elif selection_id == "dice_keeping_style":
+            self._show_dice_keeping_style_menu(user)
         elif selection_id == "back":
             self._show_main_menu(user)
+
+    def _show_dice_keeping_style_menu(self, user: NetworkUser) -> None:
+        """Show dice keeping style selection menu."""
+        items = []
+        current_style = user.preferences.dice_keeping_style
+        for style, name in self.DICE_KEEPING_STYLES.items():
+            prefix = "* " if style == current_style else ""
+            items.append(MenuItem(text=f"{prefix}{name}", id=f"style_{style.value}"))
+        items.append(MenuItem(text=Localization.get(user.locale, "back"), id="back"))
+        user.show_menu(
+            "dice_keeping_style_menu",
+            items,
+            multiletter=True,
+            escape_behavior=EscapeBehavior.SELECT_LAST,
+        )
+        self._user_states[user.username] = {"menu": "dice_keeping_style_menu"}
+
+    async def _handle_dice_keeping_style_selection(
+        self, user: NetworkUser, selection_id: str
+    ) -> None:
+        """Handle dice keeping style selection."""
+        if selection_id.startswith("style_"):
+            style_value = selection_id[6:]  # Remove "style_" prefix
+            style = DiceKeepingStyle.from_str(style_value)
+            user.preferences.dice_keeping_style = style
+            self._save_user_preferences(user)
+            style_name = self.DICE_KEEPING_STYLES.get(style, "PlayPalace style")
+            user.speak_l("dice-keeping-style-changed", style=style_name)
+            self._show_options_menu(user)
+            return
+        # Back or invalid
+        self._show_options_menu(user)
+
+    def _save_user_preferences(self, user: NetworkUser) -> None:
+        """Save user preferences to database."""
+        prefs_json = json.dumps(user.preferences.to_dict())
+        self._db.update_user_preferences(user.username, prefs_json)
 
     async def _handle_language_selection(
         self, user: NetworkUser, selection_id: str
@@ -794,10 +900,9 @@ class Server:
                         "table_id": table.table_id,
                     }
 
-        # Setup keybinds and player actions
+        # Setup keybinds (runtime only, not serialized)
+        # Action sets are already restored from serialization
         game.setup_keybinds()
-        for player in game.players:
-            game.setup_player_actions(player)
 
         # Rebuild menus for all players
         game.rebuild_all_menus()

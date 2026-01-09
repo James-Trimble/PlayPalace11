@@ -7,10 +7,6 @@ game-name-yahtzee = Yahtzee
 yahtzee-roll = Re-roll ({ $count } left)
 yahtzee-roll-all = Roll dice
 
-# Dice keeping (same style as Threes)
-yahtzee-keeping-die = Keeping { $value }.
-yahtzee-rerolling-die = Rerolling { $value }.
-
 # Upper section scoring categories
 yahtzee-score-ones = Ones for { $points } points
 yahtzee-score-twos = Twos for { $points } points

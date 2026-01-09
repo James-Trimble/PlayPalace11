@@ -12,6 +12,7 @@ from ..registry import register_game
 from ...game_utils.actions import Action, ActionSet
 from ...game_utils.bot_helper import BotHelper
 from ...game_utils.dice import DiceSet
+from ...game_utils.dice_game_mixin import DiceGameMixin
 from ...game_utils.options import IntOption, option_field, GameOptions
 from ...messages.localization import Localization
 from ...ui.keybinds import KeybindState
@@ -45,7 +46,7 @@ class ThreesOptions(GameOptions):
 
 @dataclass
 @register_game
-class ThreesGame(Game):
+class ThreesGame(Game, DiceGameMixin):
     """
     Threes dice game.
 
@@ -98,16 +99,8 @@ class ThreesGame(Game):
 
         action_set = ActionSet(name="turn")
 
-        # Dice keep/unkeep actions (1-5 keys) - shown first when visible
-        for i in range(5):
-            action_set.add(
-                Action(
-                    id=f"toggle_die_{i}",
-                    label=f"Die {i + 1}",
-                    handler=f"_action_toggle_die_{i}",
-                    hidden=True,  # Shown after first roll
-                )
-            )
+        # Dice keep/unkeep actions (1-5 keys) - shown after first roll
+        self.add_dice_toggle_actions(action_set)
 
         action_set.add(
             Action(
@@ -148,14 +141,8 @@ class ThreesGame(Game):
             "b", "Bank and end turn", ["bank"], state=KeybindState.ACTIVE
         )
 
-        # Dice toggle keybinds (1-5)
-        for i in range(5):
-            self.define_keybind(
-                str(i + 1),
-                f"Toggle die {i + 1}",
-                [f"toggle_die_{i}"],
-                state=KeybindState.ACTIVE,
-            )
+        # Dice toggle keybinds (1-5) - from DiceGameMixin
+        self.setup_dice_keybinds()
 
         # Check hand
         self.define_keybind(
@@ -282,52 +269,7 @@ class ThreesGame(Game):
         self.update_all_turn_actions()
         self.rebuild_all_menus()
 
-    # Individual die toggle handlers (dispatched by string name)
-    def _action_toggle_die_0(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 0)
-
-    def _action_toggle_die_1(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 1)
-
-    def _action_toggle_die_2(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 2)
-
-    def _action_toggle_die_3(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 3)
-
-    def _action_toggle_die_4(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 4)
-
-    def _toggle_die(self, player: Player, die_index: int) -> None:
-        """Toggle keeping a die."""
-        if not isinstance(player, ThreesPlayer):
-            return
-
-        user = self.get_user(player)
-        result = player.dice.toggle_keep(die_index)
-
-        if result is None:
-            # Die is locked
-            if user:
-                user.speak_l("threes-die-locked")
-            return
-
-        if result:
-            # Now kept
-            if user:
-                user.speak_l(
-                    "threes-keeping-die", value=player.dice.get_value(die_index)
-                )
-        else:
-            # Now unkept
-            if user:
-                user.speak_l(
-                    "threes-rerolling-die", value=player.dice.get_value(die_index)
-                )
-
-        self.update_all_turn_actions()
-        # Update menu with selection_id to keep focus on the same die
-        self.update_player_menu(player, selection_id=f"toggle_die_{die_index}")
+    # Dice toggle handlers provided by DiceGameMixin
 
     def _action_bank(self, player: Player, action_id: str) -> None:
         """Bank score and end turn."""
@@ -497,6 +439,8 @@ class ThreesGame(Game):
 
     def on_tick(self) -> None:
         """Called every tick. Handle bot AI."""
+        super().on_tick()
+
         if not self.game_active:
             return
         BotHelper.on_tick(self)

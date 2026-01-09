@@ -3,6 +3,11 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable
 from abc import ABC, abstractmethod
+import subprocess
+import sys
+import json as json_module
+from pathlib import Path
+import threading
 
 from mashumaro.mixins.json import DataClassJSONMixin
 from mashumaro.config import BaseConfig
@@ -115,6 +120,8 @@ class Game(ABC, DataClassJSONMixin):
     current_music: str = ""  # Currently playing music track
     current_ambience: str = ""  # Currently playing ambience loop
     turn_index: int = 0  # Current turn index (serialized for persistence)
+    turn_direction: int = 1  # Turn direction: 1 = forward, -1 = reverse
+    turn_skip_count: int = 0  # Number of players to skip on next advance
     turn_player_ids: list[str] = field(
         default_factory=list
     )  # Player IDs in turn order (serialized)
@@ -148,6 +155,12 @@ class Game(ABC, DataClassJSONMixin):
         self._status_box_open: set[str] = set()  # player_ids with status box open
         self._actions_menu_open: set[str] = set()  # player_ids with actions menu open
         self._destroyed: bool = False  # Whether game has been destroyed
+        # Duration estimation state
+        self._estimate_threads: list[threading.Thread] = []  # Running simulation threads
+        self._estimate_results: list[int] = []  # Collected tick counts
+        self._estimate_errors: list[str] = []  # Collected errors
+        self._estimate_running: bool = False  # Whether estimation is in progress
+        self._estimate_lock: threading.Lock = threading.Lock()  # Protect results list
 
     def rebuild_runtime_state(self) -> None:
         """
@@ -157,8 +170,9 @@ class Game(ABC, DataClassJSONMixin):
         this to rebuild any runtime-only objects not stored in serialized fields.
         Turn management and sound scheduling are now built into the base class
         using serialized fields, so they don't need rebuilding.
+
+        Note: Estimation state is initialized clean by __post_init__.
         """
-        # Base class has nothing to rebuild by default
         pass
 
     # Abstract methods games must implement
@@ -200,10 +214,13 @@ class Game(ABC, DataClassJSONMixin):
         """Called when the game starts."""
         ...
 
-    @abstractmethod
     def on_tick(self) -> None:
-        """Called every tick (50ms). Handle bot AI here."""
-        ...
+        """Called every tick (50ms). Handle bot AI here.
+
+        Subclasses should call super().on_tick() to ensure base functionality runs.
+        """
+        # Check if duration estimation has completed
+        self.check_estimate_completion()
 
     def on_round_timer_ready(self) -> None:
         """Called when round timer expires. Override in subclasses that use RoundTimer."""
@@ -553,7 +570,7 @@ class Game(ABC, DataClassJSONMixin):
             self.turn_index = 0
 
     def advance_turn(self, announce: bool = True) -> Player | None:
-        """Advance to the next player's turn.
+        """Advance to the next player's turn (respects turn_direction and skips).
 
         Args:
             announce: If True, announce the turn and play sound.
@@ -563,11 +580,46 @@ class Game(ABC, DataClassJSONMixin):
         """
         if not self.turn_player_ids:
             return None
-        self.turn_index = (self.turn_index + 1) % len(self.turn_player_ids)
+
+        # Handle skips first
+        skipped_players: list[Player] = []
+        while self.turn_skip_count > 0:
+            self.turn_skip_count -= 1
+            self.turn_index = (self.turn_index + self.turn_direction) % len(self.turn_player_ids)
+            skipped = self.current_player
+            if skipped:
+                skipped_players.append(skipped)
+
+        # Announce skipped players
+        for skipped in skipped_players:
+            self.on_player_skipped(skipped)
+
+        # Normal advance
+        self.turn_index = (self.turn_index + self.turn_direction) % len(self.turn_player_ids)
         if announce:
             self.announce_turn()
         self.rebuild_all_menus()
         return self.current_player
+
+    def skip_next_players(self, count: int = 1) -> None:
+        """Queue players to be skipped on next turn advance.
+
+        Args:
+            count: Number of players to skip (default 1).
+        """
+        self.turn_skip_count += count
+
+    def on_player_skipped(self, player: Player) -> None:
+        """Called when a player is skipped. Override to customize announcement.
+
+        Args:
+            player: The player who was skipped.
+        """
+        self.broadcast_l("game-player-skipped", player=player.name)
+
+    def reverse_turn_direction(self) -> None:
+        """Reverse the turn direction (forward <-> backward)."""
+        self.turn_direction *= -1
 
     def reset_turn_order(self, announce: bool = False) -> None:
         """Reset to the first player in turn order.
@@ -576,6 +628,8 @@ class Game(ABC, DataClassJSONMixin):
             announce: If True, announce the turn and play sound.
         """
         self.turn_index = 0
+        self.turn_direction = 1  # Reset direction to forward
+        self.turn_skip_count = 0  # Clear any pending skips
         if announce:
             self.announce_turn()
 
@@ -585,9 +639,9 @@ class Game(ABC, DataClassJSONMixin):
         if not player:
             return
 
-        # Play turn sound to the current player
+        # Play turn sound to the current player (if they have it enabled)
         user = self.get_user(player)
-        if user:
+        if user and user.preferences.play_turn_sound:
             user.play_sound(turn_sound)
 
         # Broadcast turn announcement to all players
@@ -1059,6 +1113,21 @@ class Game(ABC, DataClassJSONMixin):
         )
         return action_set
 
+    def create_estimate_action_set(self, player: Player) -> ActionSet:
+        """Create the estimate duration action set for a player."""
+        user = self.get_user(player)
+        locale = user.locale if user else "en"
+
+        action_set = ActionSet(name="estimate")
+        action_set.add(
+            Action(
+                id="estimate_duration",
+                label=Localization.get(locale, "estimate-duration"),
+                handler="_action_estimate_duration",
+            )
+        )
+        return action_set
+
     def create_standard_action_set(self, player: Player) -> ActionSet:
         """Create the standard action set (F5, save) for a player."""
         user = self.get_user(player)
@@ -1193,6 +1262,10 @@ class Game(ABC, DataClassJSONMixin):
             options_set = self.create_options_action_set(player)
             self.add_action_set(player, options_set)
 
+        # Add estimate action set (after options)
+        estimate_set = self.create_estimate_action_set(player)
+        self.add_action_set(player, estimate_set)
+
         standard_set = self.create_standard_action_set(player)
         self.add_action_set(player, standard_set)
 
@@ -1200,6 +1273,7 @@ class Game(ABC, DataClassJSONMixin):
         self.update_lobby_actions(player)
         if hasattr(self, "options"):
             self.update_options_actions(player)
+        self.update_estimate_actions(player)
         self.update_standard_actions(player)
 
     def update_lobby_actions(self, player: Player) -> None:
@@ -1280,6 +1354,26 @@ class Game(ABC, DataClassJSONMixin):
         for player in self.players:
             self.update_options_actions(player)
 
+    def update_estimate_actions(self, player: Player) -> None:
+        """Update estimate action availability based on current state."""
+        estimate_set = self.get_action_set(player, "estimate")
+        if not estimate_set:
+            return
+
+        in_waiting = self.status == "waiting"
+
+        # Estimate is visible/enabled only in waiting state
+        # Keep it enabled even when running so users see the "already running" message
+        if in_waiting:
+            estimate_set.enable("estimate_duration")
+        else:
+            estimate_set.disable("estimate_duration")
+
+    def update_all_estimate_actions(self) -> None:
+        """Update estimate actions for all players."""
+        for player in self.players:
+            self.update_estimate_actions(player)
+
     def update_standard_actions(self, player: Player) -> None:
         """Update standard action availability for a player."""
         standard_set = self.get_action_set(player, "standard")
@@ -1309,6 +1403,7 @@ class Game(ABC, DataClassJSONMixin):
     def _action_start_game(self, player: Player, action_id: str) -> None:
         """Start the game."""
         self.status = "playing"
+        self.update_all_estimate_actions()
         self.broadcast_l("game-starting")
         self.on_start()
 
@@ -1594,3 +1689,176 @@ class Game(ABC, DataClassJSONMixin):
         """
         option_name = action_id.removeprefix("toggle_")
         self._handle_option_toggle(option_name)
+
+    # ==========================================================================
+    # Duration Estimation
+    # ==========================================================================
+
+    NUM_ESTIMATE_SIMULATIONS = 10  # Number of simulations to run for estimation
+    HUMAN_SPEED_MULTIPLIER = 2  # How much slower humans are than bots (override per game)
+
+    def _action_estimate_duration(self, player: Player, action_id: str) -> None:
+        """Start duration estimation by spawning CLI simulation threads."""
+        if self._estimate_running:
+            user = self.get_user(player)
+            if user:
+                user.speak_l("estimate-already-running")
+            return
+
+        # Build the options string for CLI
+        options_args = []
+        if hasattr(self, "options"):
+            for field_name in self.options.__dataclass_fields__:
+                value = getattr(self.options, field_name)
+                options_args.extend(["-o", f"{field_name}={value}"])
+
+        # Determine number of bots (use current player count, minimum 2)
+        num_bots = max(len([p for p in self.players if not p.is_spectator]), self.get_min_players())
+
+        # Build CLI command
+        cli_path = Path(__file__).parent.parent / "cli.py"
+        base_cmd = [
+            sys.executable, str(cli_path), "simulate",
+            self.get_type(),
+            "--bots", str(num_bots),
+            "--json", "--quiet"
+        ] + options_args
+
+        # Reset results
+        self._estimate_results = []
+        self._estimate_errors = []
+        self._estimate_threads = []
+
+        # Spawn simulation threads
+        def run_simulation():
+            try:
+                result = subprocess.run(
+                    base_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,  # 10 minute timeout per simulation
+                )
+                if result.returncode == 0 and result.stdout:
+                    data = json_module.loads(result.stdout)
+                    if "ticks" in data and not data.get("timed_out", False):
+                        with self._estimate_lock:
+                            self._estimate_results.append(data["ticks"])
+                elif result.stderr:
+                    with self._estimate_lock:
+                        self._estimate_errors.append(result.stderr.strip()[:200])
+            except Exception as e:
+                with self._estimate_lock:
+                    self._estimate_errors.append(str(e)[:200])
+
+        for _ in range(self.NUM_ESTIMATE_SIMULATIONS):
+            thread = threading.Thread(target=run_simulation, daemon=True)
+            thread.start()
+            self._estimate_threads.append(thread)
+
+        if self._estimate_threads:
+            self._estimate_running = True
+            self.broadcast_l("estimate-computing")
+        else:
+            self.broadcast_l("estimate-error")
+
+    def check_estimate_completion(self) -> None:
+        """Check if duration estimation simulations have completed.
+
+        Called automatically from on_tick().
+        """
+        if not self._estimate_running or not self._estimate_threads:
+            return
+
+        # Check if all threads have completed
+        all_done = all(not t.is_alive() for t in self._estimate_threads)
+        if not all_done:
+            return
+
+        # Get results (already collected by threads)
+        with self._estimate_lock:
+            tick_counts = list(self._estimate_results)
+            errors = list(self._estimate_errors)
+
+        # Clean up
+        self._estimate_threads = []
+        self._estimate_results = []
+        self._estimate_errors = []
+        self._estimate_running = False
+
+        # Calculate and announce result
+        if tick_counts:
+            # Calculate statistics
+            avg_ticks = sum(tick_counts) / len(tick_counts)
+            std_dev_ticks = self._calculate_std_dev(tick_counts, avg_ticks)
+            outliers = self._detect_outliers(tick_counts)
+
+            # Format times
+            bot_time = self._format_duration(avg_ticks)
+            std_dev = self._format_duration(std_dev_ticks)
+            human_time = self._format_duration(avg_ticks * self.HUMAN_SPEED_MULTIPLIER)
+
+            # Format outlier info
+            if outliers:
+                outlier_info = f"{len(outliers)} outlier{'s' if len(outliers) > 1 else ''} removed. "
+            else:
+                outlier_info = ""
+
+            self.broadcast_l(
+                "estimate-result",
+                bot_time=bot_time,
+                std_dev=std_dev,
+                outlier_info=outlier_info,
+                human_time=human_time,
+            )
+        else:
+            if errors:
+                # Show the first error for debugging
+                self.broadcast(f"Estimation failed: {errors[0][:200]}")
+            else:
+                self.broadcast_l("estimate-error")
+
+    def _calculate_std_dev(self, values: list[int], mean: float) -> float:
+        """Calculate standard deviation of a list of values."""
+        if len(values) < 2:
+            return 0.0
+        variance = sum((x - mean) ** 2 for x in values) / len(values)
+        return variance ** 0.5
+
+    def _detect_outliers(self, values: list[int]) -> list[int]:
+        """Detect outliers using IQR method. Returns list of outlier values."""
+        if len(values) < 4:
+            return []
+
+        sorted_vals = sorted(values)
+        n = len(sorted_vals)
+        q1 = sorted_vals[n // 4]
+        q3 = sorted_vals[(3 * n) // 4]
+        iqr = q3 - q1
+
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+
+        return [v for v in values if v < lower_bound or v > upper_bound]
+
+    def _format_duration(self, ticks: float) -> str:
+        """Format a tick count as a human-readable duration string.
+
+        Args:
+            ticks: Number of game ticks (50ms each).
+
+        Returns:
+            Formatted string like "1:23:45" or "5:30" or "45 seconds".
+        """
+        # Convert ticks to seconds (50ms per tick = 20 ticks per second)
+        total_seconds = int(ticks / self.TICKS_PER_SECOND)
+
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        elif minutes > 0:
+            return f"{minutes}:{seconds:02d}"
+        else:
+            return f"{seconds} seconds"
