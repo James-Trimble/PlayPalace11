@@ -39,12 +39,14 @@ class Table(DataClassJSONMixin):
     _users: dict[str, "User"] = field(default_factory=dict, repr=False)
     _manager: Any = field(default=None, repr=False)  # Reference to TableManager
     _server: Any = field(default=None, repr=False)  # Reference to Server (for saves)
+    _db: Any = field(default=None, repr=False)  # Reference to Database (for ratings)
 
     def __post_init__(self):
         self._game = None
         self._users = {}
         self._manager = None
         self._server = None
+        self._db = None
 
     @property
     def game(self) -> "Game | None":

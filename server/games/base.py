@@ -28,6 +28,7 @@ from ..game_utils.options import (
     MenuOption,
 )
 from ..game_utils.game_result import GameResult, PlayerResult
+from ..game_utils.stats_helpers import RatingHelper
 from ..game_utils.teams import TeamManager
 from ..messages.localization import Localization
 from ..ui.keybinds import Keybind, KeybindState
@@ -325,13 +326,62 @@ class Game(ABC, DataClassJSONMixin):
         return lines
 
     def _persist_result(self, result: GameResult) -> None:
-        """Persist the game result to the database."""
+        """Persist the game result to the database and update ratings."""
         # Only persist if there are human players
         if not result.has_human_players():
             return
 
         if self._table:
             self._table.save_game_result(result)
+            # Update player ratings
+            self._update_ratings(result)
+
+    def _update_ratings(self, result: GameResult) -> None:
+        """Update player ratings based on game result."""
+        if not self._table or not self._table._db:
+            return
+
+        rating_helper = RatingHelper(self._table._db, self.get_type())
+
+        # Get rankings from the result
+        rankings = self.get_rankings_for_rating(result)
+        if not rankings:
+            return
+
+        # Update ratings
+        rating_helper.update_ratings(rankings)
+
+    def get_rankings_for_rating(self, result: GameResult) -> list[list[str]]:
+        """Get player rankings for rating update. Override for custom ranking logic.
+
+        Returns a list of player ID groups ordered by placement.
+        First group = 1st place, second = 2nd place, etc.
+        Players in same group = tie for that position.
+
+        Default: Winner first, everyone else tied for second.
+        """
+        winner_name = result.custom_data.get("winner_name")
+        human_players = [p for p in result.player_results if not p.is_bot]
+
+        if not human_players:
+            return []
+
+        if winner_name:
+            winner_id = None
+            others = []
+            for p in human_players:
+                if p.player_name == winner_name:
+                    winner_id = p.player_id
+                else:
+                    others.append(p.player_id)
+
+            if winner_id:
+                if others:
+                    return [[winner_id], others]
+                return [[winner_id]]
+
+        # No clear winner - everyone ties
+        return [[p.player_id for p in human_players]]
 
     def _show_end_screen(self, result: GameResult) -> None:
         """Show the end screen to all players using structured result."""
@@ -340,8 +390,6 @@ class Game(ABC, DataClassJSONMixin):
             if user:
                 lines = self.format_end_screen(result, user.locale)
                 items = [MenuItem(text=line, id="score_line") for line in lines]
-                leave_text = Localization.get(user.locale, "game-leave")
-                items.append(MenuItem(text=leave_text, id="leave_game"))
                 user.show_menu("game_over", items, multiletter=False)
 
     def show_game_end_menu(self, score_lines: list[str]) -> None:
@@ -357,10 +405,7 @@ class Game(ABC, DataClassJSONMixin):
         for player in self.players:
             user = self.get_user(player)
             if user:
-                locale = user.locale
                 items = [MenuItem(text=line, id="score_line") for line in score_lines]
-                leave_text = Localization.get(locale, "game-leave")
-                items.append(MenuItem(text=leave_text, id="leave_game"))
                 user.show_menu("game_over", items, multiletter=False)
 
     # Player management
@@ -1374,6 +1419,20 @@ class Game(ABC, DataClassJSONMixin):
         """Check scores detailed is always hidden (keybind only)."""
         return Visibility.HIDDEN
 
+    def _is_predict_outcomes_enabled(self, player: Player) -> str | None:
+        """Check if predict_outcomes action is enabled."""
+        if self.status != "playing":
+            return "action-not-playing"
+        # Need at least 2 human players for meaningful predictions
+        human_count = sum(1 for p in self.players if not p.is_bot and not p.is_spectator)
+        if human_count < 2:
+            return "action-need-more-humans"
+        return None
+
+    def _is_predict_outcomes_hidden(self, player: Player) -> Visibility:
+        """Predict outcomes is always hidden (keybind only)."""
+        return Visibility.HIDDEN
+
     # ==========================================================================
     # Action set creation
     # ==========================================================================
@@ -1507,6 +1566,15 @@ class Game(ABC, DataClassJSONMixin):
                 is_hidden="_is_check_scores_detailed_hidden",
             )
         )
+        action_set.add(
+            Action(
+                id="predict_outcomes",
+                label=Localization.get(locale, "predict-outcomes"),
+                handler="_action_predict_outcomes",
+                is_enabled="_is_predict_outcomes_enabled",
+                is_hidden="_is_predict_outcomes_hidden",
+            )
+        )
 
         return action_set
 
@@ -1565,6 +1633,13 @@ class Game(ABC, DataClassJSONMixin):
             "shift+s",
             "Detailed scores",
             ["check_scores_detailed"],
+            state=KeybindState.ACTIVE,
+            include_spectators=True,
+        )
+        self.define_keybind(
+            "ctrl+r",
+            "Predict outcomes",
+            ["predict_outcomes"],
             state=KeybindState.ACTIVE,
             include_spectators=True,
         )
@@ -1791,6 +1866,69 @@ class Game(ABC, DataClassJSONMixin):
             self.status_box(player, lines)
         else:
             self.status_box(player, ["No scores available."])
+
+    def _action_predict_outcomes(self, player: Player, action_id: str) -> None:
+        """Show predicted outcomes based on player ratings."""
+        user = self.get_user(player)
+        if not user:
+            return
+
+        if not self._table or not self._table._db:
+            user.speak_l("predict-unavailable")
+            return
+
+        rating_helper = RatingHelper(self._table._db, self.get_type())
+
+        # Get human players only (exclude spectators)
+        human_players = [
+            p for p in self.players if not p.is_bot and not p.is_spectator
+        ]
+
+        if len(human_players) < 2:
+            user.speak_l("predict-need-players")
+            return
+
+        # Get ratings for all players
+        player_ratings = []
+        for p in human_players:
+            rating = rating_helper.get_rating(p.id)
+            player_ratings.append((p, rating))
+
+        # Sort by ordinal (conservative skill estimate) descending
+        player_ratings.sort(key=lambda x: x[1].ordinal, reverse=True)
+
+        # Format predictions
+        lines = [Localization.get(user.locale, "predict-header")]
+
+        for rank, (p, rating) in enumerate(player_ratings, 1):
+            # Calculate win probability against the field
+            if len(player_ratings) == 2:
+                # 2 players: show head-to-head probability
+                other = player_ratings[1] if rank == 1 else player_ratings[0]
+                win_prob = rating_helper.predict_win_probability(p.id, other[0].id)
+                lines.append(
+                    Localization.get(
+                        user.locale,
+                        "predict-entry-2p",
+                        rank=rank,
+                        player=p.name,
+                        rating=round(rating.ordinal),
+                        probability=round(win_prob * 100),
+                    )
+                )
+            else:
+                # 3+ players: show rating only (probabilities get complex)
+                lines.append(
+                    Localization.get(
+                        user.locale,
+                        "predict-entry",
+                        rank=rank,
+                        player=p.name,
+                        rating=round(rating.ordinal),
+                    )
+                )
+
+        self.status_box(player, lines)
 
     # Player helpers
 

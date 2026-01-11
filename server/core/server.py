@@ -1001,6 +1001,10 @@ class Server:
                 id="type_wins",
             ),
             MenuItem(
+                text=Localization.get(user.locale, "leaderboard-type-rating"),
+                id="type_rating",
+            ),
+            MenuItem(
                 text=Localization.get(user.locale, "leaderboard-type-total-score"),
                 id="type_total_score",
             ),
@@ -1124,9 +1128,9 @@ class Server:
                 )
             )
 
-        # Player's own stats
-        if user.username in player_stats:
-            stats = player_stats[user.username]
+        # Player's own stats (keyed by UUID)
+        if user.uuid in player_stats:
+            stats = player_stats[user.uuid]
             wins = stats["wins"]
             losses = stats["losses"]
             total = wins + losses
@@ -1148,6 +1152,91 @@ class Server:
                 MenuItem(
                     text=Localization.get(user.locale, "leaderboard-no-player-stats"),
                     id="player_stats",
+                )
+            )
+
+        items.append(MenuItem(text=Localization.get(user.locale, "back"), id="back"))
+
+        user.show_menu(
+            "game_leaderboard",
+            items,
+            multiletter=True,
+            escape_behavior=EscapeBehavior.SELECT_LAST,
+        )
+        self._user_states[user.username] = {
+            "menu": "game_leaderboard",
+            "game_type": game_type,
+            "game_name": game_name,
+        }
+
+    def _show_rating_leaderboard(
+        self, user: NetworkUser, game_type: str, game_name: str
+    ) -> None:
+        """Show skill rating leaderboard."""
+        from ..game_utils.stats_helpers import RatingHelper
+
+        rating_helper = RatingHelper(self._db, game_type)
+        ratings = rating_helper.get_leaderboard(limit=10)
+
+        items = []
+
+        if not ratings:
+            items.append(
+                MenuItem(
+                    text=Localization.get(user.locale, "leaderboard-no-ratings"),
+                    id="no_data",
+                )
+            )
+        else:
+            for rank, rating in enumerate(ratings, 1):
+                # Get player name from UUID - check recent game results
+                player_name = rating.player_id
+                # Look up name from game results
+                results = self._db.get_game_stats(game_type, limit=100)
+                for result in results:
+                    players = self._db.get_game_result_players(result[0])
+                    for p in players:
+                        if p["player_id"] == rating.player_id:
+                            player_name = p["player_name"]
+                            break
+                    if player_name != rating.player_id:
+                        break
+
+                items.append(
+                    MenuItem(
+                        text=Localization.get(
+                            user.locale,
+                            "leaderboard-rating-entry",
+                            rank=rank,
+                            player=player_name,
+                            rating=round(rating.ordinal),
+                            mu=round(rating.mu, 1),
+                            sigma=round(rating.sigma, 1),
+                        ),
+                        id=f"entry_{rank}",
+                    )
+                )
+
+        # User's own rating
+        user_rating = rating_helper.get_rating(user.uuid)
+        if user_rating.mu != RatingHelper.DEFAULT_MU:
+            items.append(
+                MenuItem(
+                    text=Localization.get(
+                        user.locale,
+                        "leaderboard-player-rating",
+                        rating=round(user_rating.ordinal),
+                        mu=round(user_rating.mu, 1),
+                        sigma=round(user_rating.sigma, 1),
+                    ),
+                    id="player_rating",
+                )
+            )
+        else:
+            items.append(
+                MenuItem(
+                    text=Localization.get(user.locale, "leaderboard-no-player-rating"),
+                    id="player_rating",
                 )
             )
 
@@ -1486,6 +1575,8 @@ class Server:
         # Built-in leaderboard types
         if selection_id == "type_wins":
             self._show_wins_leaderboard(user, game_type, game_name)
+        elif selection_id == "type_rating":
+            self._show_rating_leaderboard(user, game_type, game_name)
         elif selection_id == "type_total_score":
             self._show_total_score_leaderboard(user, game_type, game_name)
         elif selection_id == "type_high_score":

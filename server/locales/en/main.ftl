@@ -141,6 +141,7 @@ leaderboard-no-data = No leaderboard data yet for this game.
 
 # Leaderboard types
 leaderboard-type-wins = Win Leaders
+leaderboard-type-rating = Skill Rating
 leaderboard-type-total-score = Total Score
 leaderboard-type-high-score = High Score
 leaderboard-type-games-played = Games Played
@@ -173,3 +174,18 @@ leaderboard-games-entry = { $rank }. { $player }: { $value } games
 # Player stats
 leaderboard-player-stats = Your stats: { $wins } wins, { $losses } losses ({ $percentage }% win rate)
 leaderboard-no-player-stats = You haven't played this game yet.
+
+# Skill rating leaderboard
+leaderboard-no-ratings = No rating data yet for this game.
+leaderboard-rating-entry = { $rank }. { $player }: { $rating } rating ({ $mu } ± { $sigma })
+leaderboard-player-rating = Your rating: { $rating } ({ $mu } ± { $sigma })
+leaderboard-no-player-rating = You don't have a rating for this game yet.
+
+# Prediction system
+predict-outcomes = Predict outcomes
+predict-header = Predicted Outcomes (by skill rating)
+predict-entry = { $rank }. { $player } (rating: { $rating })
+predict-entry-2p = { $rank }. { $player } (rating: { $rating }, { $probability }% win chance)
+predict-unavailable = Rating predictions are not available.
+predict-need-players = Need at least 2 human players for predictions.
+action-need-more-humans = Need more human players.

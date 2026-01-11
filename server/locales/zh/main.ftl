@@ -86,6 +86,7 @@ leaderboard-no-data = 此游戏暂无排行榜数据。
 
 # 排行榜类型
 leaderboard-type-wins = 胜利排行
+leaderboard-type-rating = 技能评分
 leaderboard-type-total-score = 总分排行
 leaderboard-type-high-score = 最高分排行
 leaderboard-type-games-played = 游戏场次排行
@@ -112,3 +113,18 @@ leaderboard-games-entry = { $rank }. { $player }：{ $value } 场
 # 玩家统计
 leaderboard-player-stats = 您的统计：{ $wins } 胜，{ $losses } 负（{ $percentage }% 胜率）
 leaderboard-no-player-stats = 您还没有玩过这个游戏。
+
+# 技能评分排行榜
+leaderboard-no-ratings = 此游戏暂无评分数据。
+leaderboard-rating-entry = { $rank }. { $player }：{ $rating } 评分（{ $mu } ± { $sigma }）
+leaderboard-player-rating = 您的评分：{ $rating }（{ $mu } ± { $sigma }）
+leaderboard-no-player-rating = 您还没有这个游戏的评分。
+
+# 预测系统
+predict-outcomes = 预测结果
+predict-header = 预测结果（按技能评分）
+predict-entry = { $rank }. { $player }（评分：{ $rating }）
+predict-entry-2p = { $rank }. { $player }（评分：{ $rating }，{ $probability }% 获胜概率）
+predict-unavailable = 评分预测不可用。
+predict-need-players = 需要至少2名人类玩家才能进行预测。
+action-need-more-humans = 需要更多人类玩家。

@@ -31,6 +31,8 @@ class TableManager:
         )
         table._manager = self
         table._server = self._server
+        if self._server:
+            table._db = self._server._db
         table.add_member(host_username, host_user, as_spectator=False)
         self._tables[table_id] = table
         return table
@@ -75,6 +77,8 @@ class TableManager:
         """Add an existing table (e.g., loaded from database)."""
         table._manager = self
         table._server = self._server
+        if self._server:
+            table._db = self._server._db
         self._tables[table.table_id] = table
 
     def save_all(self) -> list[Table]:

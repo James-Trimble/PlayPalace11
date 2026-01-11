@@ -87,6 +87,7 @@ leaderboard-no-data = Ainda não há dados de placar para este jogo.
 
 # Tipos de placar
 leaderboard-type-wins = Líderes em Vitórias
+leaderboard-type-rating = Classificação de Habilidade
 leaderboard-type-total-score = Pontuação Total
 leaderboard-type-high-score = Maior Pontuação
 leaderboard-type-games-played = Jogos Disputados
@@ -119,3 +120,18 @@ leaderboard-games-entry = { $rank }. { $player }: { $value } jogos
 # Estatísticas do jogador
 leaderboard-player-stats = Suas estatísticas: { $wins } vitórias, { $losses } derrotas ({ $percentage }% de vitórias)
 leaderboard-no-player-stats = Você ainda não jogou este jogo.
+
+# Placar de classificação de habilidade
+leaderboard-no-ratings = Ainda não há dados de classificação para este jogo.
+leaderboard-rating-entry = { $rank }. { $player }: { $rating } classificação ({ $mu } ± { $sigma })
+leaderboard-player-rating = Sua classificação: { $rating } ({ $mu } ± { $sigma })
+leaderboard-no-player-rating = Você ainda não tem classificação neste jogo.
+
+# Sistema de previsão
+predict-outcomes = Prever resultados
+predict-header = Resultados Previstos (por classificação de habilidade)
+predict-entry = { $rank }. { $player } (classificação: { $rating })
+predict-entry-2p = { $rank }. { $player } (classificação: { $rating }, { $probability }% de chance de vitória)
+predict-unavailable = Previsões de classificação não estão disponíveis.
+predict-need-players = Necessário pelo menos 2 jogadores humanos para previsões.
+action-need-more-humans = Necessário mais jogadores humanos.
