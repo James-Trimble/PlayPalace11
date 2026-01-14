@@ -56,6 +56,14 @@ tradeoff-pool-display = Pool ({ $count } dados): { $dice }
 tradeoff-player-info = { $player }: { $hand }. Trocou: { $traded }.
 tradeoff-player-info-no-trade = { $player }: { $hand }. Não trocou nada.
 
+# Mensagens de erro
+tradeoff-not-trading-phase = Não está na fase de troca.
+tradeoff-not-taking-phase = Não está na fase de pegar.
+tradeoff-already-confirmed = Já confirmado.
+tradeoff-no-die = Nenhum dado para alternar.
+tradeoff-no-more-takes = Não há mais pegadas disponíveis.
+tradeoff-not-in-pool = Esse dado não está no pool.
+
 # Opções
 tradeoff-set-target = Pontuação alvo: { $score }
 tradeoff-enter-target = Digite a pontuação alvo:

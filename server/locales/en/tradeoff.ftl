@@ -56,6 +56,14 @@ tradeoff-pool-display = Pool ({ $count } dice): { $dice }
 tradeoff-player-info = { $player }: { $hand }. Traded: { $traded }.
 tradeoff-player-info-no-trade = { $player }: { $hand }. Traded nothing.
 
+# Error messages
+tradeoff-not-trading-phase = Not in the trading phase.
+tradeoff-not-taking-phase = Not in the taking phase.
+tradeoff-already-confirmed = Already confirmed.
+tradeoff-no-die = No die to toggle.
+tradeoff-no-more-takes = No more takes available.
+tradeoff-not-in-pool = That die is not in the pool.
+
 # Options
 tradeoff-set-target = Target score: { $score }
 tradeoff-enter-target = Enter target score:

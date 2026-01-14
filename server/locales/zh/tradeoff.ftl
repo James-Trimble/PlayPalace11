@@ -56,6 +56,14 @@ tradeoff-pool-display = 池（{ $count } 个骰子）：{ $dice }
 tradeoff-player-info = { $player }：{ $hand }。交易了：{ $traded }。
 tradeoff-player-info-no-trade = { $player }：{ $hand }。没有交易。
 
+# 错误消息
+tradeoff-not-trading-phase = 不在交易阶段。
+tradeoff-not-taking-phase = 不在取骰阶段。
+tradeoff-already-confirmed = 已确认。
+tradeoff-no-die = 没有骰子可切换。
+tradeoff-no-more-takes = 没有更多可取的骰子。
+tradeoff-not-in-pool = 该骰子不在池中。
+
 # 选项
 tradeoff-set-target = 目标分数：{ $score }
 tradeoff-enter-target = 输入目标分数：
