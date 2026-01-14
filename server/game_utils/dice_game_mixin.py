@@ -66,7 +66,7 @@ class DiceGameMixin:
                 Action(
                     id=f"toggle_die_{i}",
                     label=f"Die {i + 1}",
-                    handler=f"_action_toggle_die_{i}",
+                    handler="_action_toggle_die",
                     is_enabled=f"_is_toggle_die_{i}_enabled",
                     is_hidden=f"_is_toggle_die_{i}_hidden",
                     get_label=f"_get_toggle_die_{i}_label",
@@ -80,7 +80,7 @@ class DiceGameMixin:
                 Action(
                     id=f"dice_key_{v}",
                     label=f"Dice key {v}",
-                    handler=f"_action_dice_key_{v}",
+                    handler="_action_dice_key",
                     is_enabled="_is_dice_key_enabled",
                     is_hidden="_is_dice_key_hidden",
                 )
@@ -90,7 +90,7 @@ class DiceGameMixin:
                 Action(
                     id=f"dice_unkeep_{v}",
                     label=f"Unkeep {v}",
-                    handler=f"_action_dice_unkeep_{v}",
+                    handler="_action_dice_unkeep",
                     is_enabled="_is_dice_key_enabled",
                     is_hidden="_is_dice_key_hidden",
                 )
@@ -138,52 +138,80 @@ class DiceGameMixin:
         return Visibility.HIDDEN
 
     # Per-die enabled/hidden/label methods - delegate to generic versions
+    # These use action_id to extract die index, so they work for any number of dice
     # Games must implement _is_dice_toggle_enabled, _is_dice_toggle_hidden, _get_dice_toggle_label
 
-    def _is_toggle_die_0_enabled(self, player: Player) -> str | None:
-        return self._is_dice_toggle_enabled(player, 0)
+    def _is_toggle_die_0_enabled(self, player: Player, *, action_id: str = None) -> str | None:
+        die_index = int(action_id.split("_")[-1]) if action_id else 0
+        return self._is_dice_toggle_enabled(player, die_index)
 
-    def _is_toggle_die_1_enabled(self, player: Player) -> str | None:
-        return self._is_dice_toggle_enabled(player, 1)
+    def _is_toggle_die_1_enabled(self, player: Player, *, action_id: str = None) -> str | None:
+        die_index = int(action_id.split("_")[-1]) if action_id else 1
+        return self._is_dice_toggle_enabled(player, die_index)
 
-    def _is_toggle_die_2_enabled(self, player: Player) -> str | None:
-        return self._is_dice_toggle_enabled(player, 2)
+    def _is_toggle_die_2_enabled(self, player: Player, *, action_id: str = None) -> str | None:
+        die_index = int(action_id.split("_")[-1]) if action_id else 2
+        return self._is_dice_toggle_enabled(player, die_index)
 
-    def _is_toggle_die_3_enabled(self, player: Player) -> str | None:
-        return self._is_dice_toggle_enabled(player, 3)
+    def _is_toggle_die_3_enabled(self, player: Player, *, action_id: str = None) -> str | None:
+        die_index = int(action_id.split("_")[-1]) if action_id else 3
+        return self._is_dice_toggle_enabled(player, die_index)
 
-    def _is_toggle_die_4_enabled(self, player: Player) -> str | None:
-        return self._is_dice_toggle_enabled(player, 4)
+    def _is_toggle_die_4_enabled(self, player: Player, *, action_id: str = None) -> str | None:
+        die_index = int(action_id.split("_")[-1]) if action_id else 4
+        return self._is_dice_toggle_enabled(player, die_index)
 
-    def _is_toggle_die_0_hidden(self, player: Player) -> Visibility:
-        return self._is_dice_toggle_hidden(player, 0)
+    def _is_toggle_die_5_enabled(self, player: Player, *, action_id: str = None) -> str | None:
+        die_index = int(action_id.split("_")[-1]) if action_id else 5
+        return self._is_dice_toggle_enabled(player, die_index)
 
-    def _is_toggle_die_1_hidden(self, player: Player) -> Visibility:
-        return self._is_dice_toggle_hidden(player, 1)
+    def _is_toggle_die_0_hidden(self, player: Player, *, action_id: str = None) -> Visibility:
+        die_index = int(action_id.split("_")[-1]) if action_id else 0
+        return self._is_dice_toggle_hidden(player, die_index)
 
-    def _is_toggle_die_2_hidden(self, player: Player) -> Visibility:
-        return self._is_dice_toggle_hidden(player, 2)
+    def _is_toggle_die_1_hidden(self, player: Player, *, action_id: str = None) -> Visibility:
+        die_index = int(action_id.split("_")[-1]) if action_id else 1
+        return self._is_dice_toggle_hidden(player, die_index)
 
-    def _is_toggle_die_3_hidden(self, player: Player) -> Visibility:
-        return self._is_dice_toggle_hidden(player, 3)
+    def _is_toggle_die_2_hidden(self, player: Player, *, action_id: str = None) -> Visibility:
+        die_index = int(action_id.split("_")[-1]) if action_id else 2
+        return self._is_dice_toggle_hidden(player, die_index)
 
-    def _is_toggle_die_4_hidden(self, player: Player) -> Visibility:
-        return self._is_dice_toggle_hidden(player, 4)
+    def _is_toggle_die_3_hidden(self, player: Player, *, action_id: str = None) -> Visibility:
+        die_index = int(action_id.split("_")[-1]) if action_id else 3
+        return self._is_dice_toggle_hidden(player, die_index)
+
+    def _is_toggle_die_4_hidden(self, player: Player, *, action_id: str = None) -> Visibility:
+        die_index = int(action_id.split("_")[-1]) if action_id else 4
+        return self._is_dice_toggle_hidden(player, die_index)
+
+    def _is_toggle_die_5_hidden(self, player: Player, *, action_id: str = None) -> Visibility:
+        die_index = int(action_id.split("_")[-1]) if action_id else 5
+        return self._is_dice_toggle_hidden(player, die_index)
 
     def _get_toggle_die_0_label(self, player: Player, action_id: str) -> str:
-        return self._get_dice_toggle_label(player, 0)
+        die_index = int(action_id.split("_")[-1])
+        return self._get_dice_toggle_label(player, die_index)
 
     def _get_toggle_die_1_label(self, player: Player, action_id: str) -> str:
-        return self._get_dice_toggle_label(player, 1)
+        die_index = int(action_id.split("_")[-1])
+        return self._get_dice_toggle_label(player, die_index)
 
     def _get_toggle_die_2_label(self, player: Player, action_id: str) -> str:
-        return self._get_dice_toggle_label(player, 2)
+        die_index = int(action_id.split("_")[-1])
+        return self._get_dice_toggle_label(player, die_index)
 
     def _get_toggle_die_3_label(self, player: Player, action_id: str) -> str:
-        return self._get_dice_toggle_label(player, 3)
+        die_index = int(action_id.split("_")[-1])
+        return self._get_dice_toggle_label(player, die_index)
 
     def _get_toggle_die_4_label(self, player: Player, action_id: str) -> str:
-        return self._get_dice_toggle_label(player, 4)
+        die_index = int(action_id.split("_")[-1])
+        return self._get_dice_toggle_label(player, die_index)
+
+    def _get_toggle_die_5_label(self, player: Player, action_id: str) -> str:
+        die_index = int(action_id.split("_")[-1])
+        return self._get_dice_toggle_label(player, die_index)
 
     # Default implementations - games should override these
     def _is_dice_toggle_enabled(self, player: Player, die_index: int) -> str | None:
@@ -225,66 +253,33 @@ class DiceGameMixin:
             return f"{die_val} (kept)"
         return str(die_val)
 
-    # Individual toggle handlers for menu items (always by index)
-    def _action_toggle_die_0(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 0)
+    # Single toggle handler for all dice (extracts index from action ID)
+    def _action_toggle_die(self, player: Player, action_id: str) -> None:
+        """Handle toggle_die_X action by extracting die index from action ID."""
+        # Extract die index from action ID (e.g., "toggle_die_0" -> 0)
+        die_index = int(action_id.split("_")[-1])
+        self._toggle_die(player, die_index)
 
-    def _action_toggle_die_1(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 1)
+    # Single keybind handler for dice keys (extracts key number from action ID)
+    def _action_dice_key(self, player: Player, action_id: str) -> None:
+        """Handle dice_key_X action by extracting key number from action ID."""
+        # Extract key number from action ID (e.g., "dice_key_1" -> 1)
+        key_num = int(action_id.split("_")[-1])
+        self._handle_dice_key(player, key_num)
 
-    def _action_toggle_die_2(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 2)
-
-    def _action_toggle_die_3(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 3)
-
-    def _action_toggle_die_4(self, player: Player, action_id: str) -> None:
-        self._toggle_die(player, 4)
-
-    # Keybind handlers for dice keys 1-6
-    def _action_dice_key_1(self, player: Player, action_id: str) -> None:
-        self._handle_dice_key(player, 1)
-
-    def _action_dice_key_2(self, player: Player, action_id: str) -> None:
-        self._handle_dice_key(player, 2)
-
-    def _action_dice_key_3(self, player: Player, action_id: str) -> None:
-        self._handle_dice_key(player, 3)
-
-    def _action_dice_key_4(self, player: Player, action_id: str) -> None:
-        self._handle_dice_key(player, 4)
-
-    def _action_dice_key_5(self, player: Player, action_id: str) -> None:
-        self._handle_dice_key(player, 5)
-
-    def _action_dice_key_6(self, player: Player, action_id: str) -> None:
-        self._handle_dice_key(player, 6)
-
-    # Shift+key handlers for unkeeping by value
-    def _action_dice_unkeep_1(self, player: Player, action_id: str) -> None:
-        self._handle_dice_unkeep(player, 1)
-
-    def _action_dice_unkeep_2(self, player: Player, action_id: str) -> None:
-        self._handle_dice_unkeep(player, 2)
-
-    def _action_dice_unkeep_3(self, player: Player, action_id: str) -> None:
-        self._handle_dice_unkeep(player, 3)
-
-    def _action_dice_unkeep_4(self, player: Player, action_id: str) -> None:
-        self._handle_dice_unkeep(player, 4)
-
-    def _action_dice_unkeep_5(self, player: Player, action_id: str) -> None:
-        self._handle_dice_unkeep(player, 5)
-
-    def _action_dice_unkeep_6(self, player: Player, action_id: str) -> None:
-        self._handle_dice_unkeep(player, 6)
+    # Single handler for shift+key unkeeping (extracts value from action ID)
+    def _action_dice_unkeep(self, player: Player, action_id: str) -> None:
+        """Handle dice_unkeep_X action by extracting value from action ID."""
+        # Extract value from action ID (e.g., "dice_unkeep_1" -> 1)
+        value = int(action_id.split("_")[-1])
+        self._handle_dice_unkeep(player, value)
 
     def _handle_dice_key(self, player: Player, key_num: int) -> None:
         """
         Handle a dice key press (1-6).
 
         Behavior depends on user's dice keeping style preference:
-        - PlayPalace style: Toggle die at index (key_num - 1) for keys 1-5
+        - PlayPalace style: Toggle die at index (key_num - 1)
         - Quentin C style: Keep first unkept die with face value key_num
         """
         user = self.get_user(player)
@@ -294,9 +289,10 @@ class DiceGameMixin:
         style = user.preferences.dice_keeping_style
 
         if style == DiceKeepingStyle.PLAYPALACE:
-            # Toggle by index (only keys 1-5 work)
-            if key_num <= 5:
-                self._toggle_die(player, key_num - 1)
+            # Toggle by index - check if die index is valid
+            die_index = key_num - 1
+            if hasattr(player, "dice") and die_index < player.dice.num_dice:
+                self._toggle_die(player, die_index)
         else:
             # Quentin C style: keep by face value
             self._keep_by_value(player, key_num)

@@ -1,6 +1,7 @@
 """Action system for games - declarative callbacks for state management."""
 
 import copy
+import inspect
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -56,10 +57,12 @@ class Action(DataClassJSONMixin):
 
     Callback signatures:
     - handler: (self, player, action_id) or (self, player, input_value, action_id)
-    - is_enabled: (self, player) -> str | None
+    - is_enabled: (self, player, *, action_id: str = None) -> str | None
       Returns None if enabled, or a localization key (disabled reason) if disabled.
-    - is_hidden: (self, player) -> Visibility
+      The action_id kwarg is optional and passed if the method signature accepts it.
+    - is_hidden: (self, player, *, action_id: str = None) -> Visibility
       Returns Visibility.VISIBLE or Visibility.HIDDEN.
+      The action_id kwarg is optional and passed if the method signature accepts it.
     - get_label: (self, player, action_id) -> str
       Returns the dynamic label string.
     """
@@ -134,14 +137,24 @@ class ActionSet(DataClassJSONMixin):
         if action.is_enabled:
             method = getattr(game, action.is_enabled, None)
             if method:
-                disabled_reason = method(player)
+                # Check if method accepts action_id kwarg
+                sig = inspect.signature(method)
+                if 'action_id' in sig.parameters:
+                    disabled_reason = method(player, action_id=action.id)
+                else:
+                    disabled_reason = method(player)
 
         # Resolve visibility
         visible = True
         if action.is_hidden:
             method = getattr(game, action.is_hidden, None)
             if method:
-                visibility = method(player)
+                # Check if method accepts action_id kwarg
+                sig = inspect.signature(method)
+                if 'action_id' in sig.parameters:
+                    visibility = method(player, action_id=action.id)
+                else:
+                    visibility = method(player)
                 visible = visibility == Visibility.VISIBLE
 
         # Resolve label

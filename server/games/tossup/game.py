@@ -232,10 +232,8 @@ class TossUpGame(Game):
         super().setup_keybinds()
 
         # Turn action keybinds
-        self.define_keybind("space", "Roll dice", ["roll"], state=KeybindState.ACTIVE)
-        self.define_keybind(
-            "backspace", "Bank points", ["bank"], state=KeybindState.ACTIVE
-        )
+        self.define_keybind("r", "Roll dice", ["roll"], state=KeybindState.ACTIVE)
+        self.define_keybind("b", "Bank points", ["bank"], state=KeybindState.ACTIVE)
 
     def _action_roll(self, player: Player, action_id: str) -> None:
         """Handle roll action."""

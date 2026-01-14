@@ -29,7 +29,7 @@ class MainWindow(wx.Frame):
         """
         super().__init__(
             parent=None,
-            title="PlayPalace 10.25.1203",
+            title="PlayPalace 11",
             size=(1, 1),  # Minimal size for audio-only interface
         )
 
