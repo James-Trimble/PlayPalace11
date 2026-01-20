@@ -2074,6 +2074,19 @@ class Server:
                                 "language": language,
                             }
                         )
+        elif convo == "lobby":
+            # Send to all users NOT in a game (in lobby)
+            for user in self._users.values():
+                if user and not self._tables.find_user_table(user.username):
+                    await user.connection.send(
+                        {
+                            "type": "chat",
+                            "convo": "lobby",
+                            "sender": username,
+                            "message": message,
+                            "language": language,
+                        }
+                    )
         elif convo == "global":
             # Broadcast to all users
             if self._ws_server:
