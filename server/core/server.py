@@ -544,6 +544,7 @@ class Server:
             multiletter=True,
             escape_behavior=EscapeBehavior.SELECT_LAST,
         )
+        user.stop_music()
         user.play_music("settingsmus.ogg")
         self._user_states[user.username] = {"menu": "options_menu"}
 
@@ -817,6 +818,7 @@ class Server:
                 "menu": "in_game",
                 "table_id": table.table_id,
             }
+            user.stop_music()
             user.play_music("findgamemus.ogg")
 
         elif selection_id.startswith("table_"):
@@ -894,6 +896,7 @@ class Server:
                         "menu": "in_game",
                         "table_id": table_id,
                     }
+                    user.stop_music()
                     user.play_music("findgamemus.ogg")
                     return
                 else:
@@ -904,6 +907,7 @@ class Server:
                         "menu": "in_game",
                         "table_id": table_id,
                     }
+                    user.stop_music()
                     user.play_music("findgamemus.ogg")
                     return
 
@@ -919,6 +923,7 @@ class Server:
             game.broadcast_sound("join.ogg")
             game.rebuild_all_menus()
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
+            user.stop_music()
             user.play_music("findgamemus.ogg")
 
         elif selection_id == "join_spectator":
@@ -926,6 +931,7 @@ class Server:
             user.speak_l("spectator-joined", host=table.host)
             # TODO: spectator viewing - for now just track membership
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
+            user.stop_music()
             user.play_music("findgamemus.ogg")
 
         elif selection_id == "back":
