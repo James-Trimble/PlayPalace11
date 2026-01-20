@@ -544,6 +544,7 @@ class Server:
             multiletter=True,
             escape_behavior=EscapeBehavior.SELECT_LAST,
         )
+        user.play_music("settingsmus.ogg")
         self._user_states[user.username] = {"menu": "options_menu"}
 
     def _show_language_menu(self, user: NetworkUser) -> None:
@@ -816,6 +817,7 @@ class Server:
                 "menu": "in_game",
                 "table_id": table.table_id,
             }
+            user.play_music("findgamemus.ogg")
 
         elif selection_id.startswith("table_"):
             table_id = selection_id[6:]  # Remove "table_" prefix
@@ -892,6 +894,7 @@ class Server:
                         "menu": "in_game",
                         "table_id": table_id,
                     }
+                    user.play_music("findgamemus.ogg")
                     return
                 else:
                     # No matching player - join as spectator instead
@@ -901,6 +904,7 @@ class Server:
                         "menu": "in_game",
                         "table_id": table_id,
                     }
+                    user.play_music("findgamemus.ogg")
                     return
 
             if len(game.players) >= game.get_max_players():
@@ -915,12 +919,14 @@ class Server:
             game.broadcast_sound("join.ogg")
             game.rebuild_all_menus()
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
+            user.play_music("findgamemus.ogg")
 
         elif selection_id == "join_spectator":
             table.add_member(user.username, user, as_spectator=True)
             user.speak_l("spectator-joined", host=table.host)
             # TODO: spectator viewing - for now just track membership
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
+            user.play_music("findgamemus.ogg")
 
         elif selection_id == "back":
             self._show_tables_menu(user, state.get("game_type", ""))
