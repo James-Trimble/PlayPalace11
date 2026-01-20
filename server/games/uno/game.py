@@ -294,7 +294,7 @@ class UnoGame(Game):
                 self.pending_draw_target_id = target_id
                 self.pending_draw_amount = 4
         self._update_all_card_actions()
-        self._end_turn()
+        self._after_card_play(player)
 
     def _action_show_top(self, player: Player, action_id: str) -> None:
         if not self.discard_pile:
@@ -364,7 +364,10 @@ class UnoGame(Game):
             self.play_sound("game_uno/buzzerplay.ogg")
             self.broadcast_l("uno-draw-penalty", player=player.name, count=amount)
             self._update_all_card_actions()
-            self._end_turn()
+            if player.is_bot:
+                self._bot_take_turn(player)
+            else:
+                self.rebuild_all_menus()
             return
 
         # Announce turn
