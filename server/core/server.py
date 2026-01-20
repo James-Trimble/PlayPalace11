@@ -39,11 +39,14 @@ class Server:
         locales_dir: str | Path | None = None,
         ssl_cert: str | Path | None = None,
         ssl_key: str | Path | None = None,
+        status_file: str | Path | None = None,
     ):
         self.host = host
         self.port = port
         self._ssl_cert = ssl_cert
         self._ssl_key = ssl_key
+        self._status_file = Path(status_file) if status_file else None
+        self._status_update_counter = 0  # Update status file every 20 ticks (~1 second)
 
         # Initialize components
         self._db = Database(db_path)
@@ -162,6 +165,12 @@ class Server:
         # Flush queued messages for all users
         self._flush_user_messages()
 
+        # Update status file every ~1 second (20 ticks)
+        self._status_update_counter += 1
+        if self._status_update_counter >= 20 and self._status_file:
+            self._status_update_counter = 0
+            self._update_status_file()
+
     def _flush_user_messages(self) -> None:
         """Send all queued messages for all users."""
         for username, user in self._users.items():
@@ -171,6 +180,25 @@ class Server:
                 if client:
                     for msg in messages:
                         asyncio.create_task(client.send(msg))
+
+    def _update_status_file(self) -> None:
+        """Write current server status to JSON file for external monitoring."""
+        if not self._status_file:
+            return
+        
+        import time
+        
+        status_data = {
+            "version": VERSION,
+            "online": True,
+            "players": len(self._users),
+            "updated": int(time.time())
+        }
+        
+        try:
+            self._status_file.write_text(json.dumps(status_data))
+        except Exception as e:
+            print(f"Failed to write status file: {e}")
 
     async def _on_client_connect(self, client: ClientConnection) -> None:
         """Handle new client connection."""
@@ -2057,6 +2085,7 @@ async def run_server(
     port: int = 8000,
     ssl_cert: str | Path | None = None,
     ssl_key: str | Path | None = None,
+    status_file: str | Path | None = None,
 ) -> None:
     """Run the server.
 
@@ -2065,8 +2094,9 @@ async def run_server(
         port: Port number to listen on
         ssl_cert: Path to SSL certificate file (for WSS support)
         ssl_key: Path to SSL private key file (for WSS support)
+        status_file: Path to write status.json for external monitoring
     """
-    server = Server(host=host, port=port, ssl_cert=ssl_cert, ssl_key=ssl_key)
+    server = Server(host=host, port=port, ssl_cert=ssl_cert, ssl_key=ssl_key, status_file=status_file)
     await server.start()
 
     try:

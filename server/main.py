@@ -59,6 +59,11 @@ Examples:
         dest="ssl_key",
         help="Path to SSL private key file. For Let's Encrypt, use privkey.pem",
     )
+    parser.add_argument(
+        "--status-file",
+        dest="status_file",
+        help="Path to write status.json for external monitoring (e.g., website)",
+    )
 
     args = parser.parse_args()
 
@@ -75,6 +80,7 @@ Examples:
             port=args.port,
             ssl_cert=args.ssl_cert,
             ssl_key=args.ssl_key,
+            status_file=args.status_file,
         )
     )
 
