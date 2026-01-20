@@ -482,6 +482,7 @@ class ConfigManager:
 
         host = server.get("host", "")
         port = server.get("port", "8000")
+        use_ssl = server.get("ssl", False)
 
         # Check if host already has a scheme
         if "://" in host:
@@ -489,7 +490,8 @@ class ConfigManager:
             host_part = host.split("://", 1)[1]
             return f"{scheme}://{host_part}:{port}"
         else:
-            return f"ws://{host}:{port}"
+            scheme = "wss" if use_ssl else "ws"
+            return f"{scheme}://{host}:{port}"
 
     def set_last_server(self, server_id: str):
         """Set the last connected server.
