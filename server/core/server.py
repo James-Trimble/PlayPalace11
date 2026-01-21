@@ -801,7 +801,16 @@ class Server:
         """Handle logout confirmation selection."""
         if selection_id == "confirm_logout":
             user.speak_l("goodbye")
-            await user.connection.send({"type": "disconnect", "reconnect": False})
+            # Remove user state first to prevent menu loop
+            if user.username in self._user_states:
+                del self._user_states[user.username]
+            # Send disconnect message and close connection cleanly
+            try:
+                await user.connection.send({"type": "disconnect", "reconnect": False})
+            except Exception:
+                pass  # Connection might already be closing
+            # Close the connection
+            await user.connection.close()
         else:
             # Cancel logout, return to main menu
             self._show_main_menu(user)
