@@ -1,5 +1,5 @@
 """
-Command-line interface for AI agents to simulate and watch games.
+Command-line interface for AI agents to simulate and watch games, and for user account management.
 
 All operations are parameter-based with no interactive input required.
 
@@ -24,6 +24,12 @@ Usage examples:
 
     # Show game options
     python -m server.cli show-options lightturret
+
+    # User account management
+    python -m server.cli user create testuser password123
+    python -m server.cli user create testuser password123 --locale pl
+    python -m server.cli user exists testuser
+    python -m server.cli user reset-password testuser newpassword456
 """
 
 import argparse
@@ -476,6 +482,64 @@ def cmd_simulate(args):
                     print(f"  {line}")
 
 
+def cmd_user_create(args):
+    """Create a new user account."""
+    from server.persistence.database import Database
+    from server.auth.auth import AuthManager
+
+    db = Database("playpalace.db")
+    db.connect()
+    
+    try:
+        auth = AuthManager(db)
+        locale = getattr(args, 'locale', 'en')
+        
+        if auth.register(args.username, args.password, locale):
+            print(f"✓ Account created: {args.username} (locale: {locale})")
+        else:
+            print(f"✗ Account already exists: {args.username}")
+            sys.exit(1)
+    finally:
+        db.close()
+
+
+def cmd_user_exists(args):
+    """Check if a user account exists."""
+    from server.persistence.database import Database
+
+    db = Database("playpalace.db")
+    db.connect()
+    
+    try:
+        if db.user_exists(args.username):
+            print(f"✓ Account exists: {args.username}")
+        else:
+            print(f"✗ Account not found: {args.username}")
+            sys.exit(1)
+    finally:
+        db.close()
+
+
+def cmd_user_reset_password(args):
+    """Reset a user's password."""
+    from server.persistence.database import Database
+    from server.auth.auth import AuthManager
+
+    db = Database("playpalace.db")
+    db.connect()
+    
+    try:
+        auth = AuthManager(db)
+        
+        if auth.reset_password(args.username, args.password):
+            print(f"✓ Password reset: {args.username}")
+        else:
+            print(f"✗ Account not found: {args.username}")
+            sys.exit(1)
+    finally:
+        db.close()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="PlayPalace CLI for AI agents",
@@ -528,6 +592,25 @@ def main():
         help="Save and restore game state after each tick to test serialization",
     )
 
+    # user command
+    user_parser = subparsers.add_parser("user", help="User account management")
+    user_subparsers = user_parser.add_subparsers(dest="user_command", help="User commands")
+    
+    # user create subcommand
+    user_create_parser = user_subparsers.add_parser("create", help="Create a new user account")
+    user_create_parser.add_argument("username", help="Username")
+    user_create_parser.add_argument("password", help="Password")
+    user_create_parser.add_argument("--locale", default="en", help="User locale (default: en)")
+    
+    # user exists subcommand
+    user_exists_parser = user_subparsers.add_parser("exists", help="Check if user exists")
+    user_exists_parser.add_argument("username", help="Username")
+    
+    # user reset-password subcommand
+    user_reset_parser = user_subparsers.add_parser("reset-password", help="Reset user password")
+    user_reset_parser.add_argument("username", help="Username")
+    user_reset_parser.add_argument("password", help="New password")
+
     args = parser.parse_args()
 
     if args.command == "list-games":
@@ -536,6 +619,16 @@ def main():
         cmd_show_options(args)
     elif args.command == "simulate":
         cmd_simulate(args)
+    elif args.command == "user":
+        if args.user_command == "create":
+            cmd_user_create(args)
+        elif args.user_command == "exists":
+            cmd_user_exists(args)
+        elif args.user_command == "reset-password":
+            cmd_user_reset_password(args)
+        else:
+            user_parser.print_help()
+            sys.exit(1)
     else:
         parser.print_help()
         sys.exit(1)
