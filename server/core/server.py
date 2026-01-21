@@ -254,6 +254,8 @@ class Server:
             await self._handle_chat(client, packet)
         elif packet_type == "ping":
             await self._handle_ping(client)
+        elif packet_type == "check_update":
+            await self._handle_check_update(client, packet)
 
     async def _handle_authorize(self, client: ClientConnection, packet: dict) -> None:
         """Handle authorization packet."""
@@ -726,8 +728,7 @@ class Server:
                 self._show_logout_confirmation(user)
             else:
                 # Logout immediately
-                user.speak_l("goodbye")
-                await user.connection.send({"type": "disconnect", "reconnect": False})
+                await self._perform_logout(user)
 
     async def _handle_options_selection(
         self, user: NetworkUser, selection_id: str
@@ -800,22 +801,26 @@ class Server:
     ) -> None:
         """Handle logout confirmation selection."""
         if selection_id == "confirm_logout":
-            user.speak_l("goodbye")
-            # Remove user state first to prevent menu loop
-            if user.username in self._user_states:
-                del self._user_states[user.username]
-            # Send disconnect message and close connection cleanly
-            try:
-                await user.connection.send({"type": "disconnect", "reconnect": False})
-                # Give client time to receive and process the disconnect message
-                await asyncio.sleep(0.2)
-            except Exception:
-                pass  # Connection might already be closing
-            # Close the connection
-            await user.connection.close()
+            await self._perform_logout(user)
         else:
             # Cancel logout, return to main menu
             self._show_main_menu(user)
+
+    async def _perform_logout(self, user: NetworkUser) -> None:
+        """Perform the logout sequence."""
+        user.speak_l("goodbye")
+        # Remove user state to prevent menu loop
+        if user.username in self._user_states:
+            del self._user_states[user.username]
+        # Send disconnect message and close connection cleanly
+        try:
+            await user.connection.send({"type": "disconnect", "reconnect": False})
+            # Give client time to receive and process the disconnect message
+            await asyncio.sleep(0.2)
+        except Exception:
+            pass  # Connection might already be closing
+        # Close the connection
+        await user.connection.close()
 
     async def _handle_language_selection(
         self, user: NetworkUser, selection_id: str
@@ -2181,6 +2186,19 @@ class Server:
     async def _handle_ping(self, client: ClientConnection) -> None:
         """Handle ping request - respond immediately with pong."""
         await client.send({"type": "pong"})
+
+    async def _handle_check_update(self, client: ClientConnection, packet: dict) -> None:
+        """Handle client update check request."""
+        client_version = packet.get("version", "0.0.0")
+        
+        # Get latest version info (would normally read from file or endpoint)
+        # For now, return current server version and download info
+        await client.send({
+            "type": "update_available",
+            "current_version": VERSION,
+            "download_url": "https://playpalace.dev/releases/latest.json",
+            "changelog": "Check website for latest features and fixes"
+        })
 
 
 async def run_server(
