@@ -26,9 +26,6 @@ class UserPreferences:
     # Sound preferences
     play_turn_sound: bool = True  # Play sound when it's your turn
 
-    # Interface preferences
-    confirm_exit: bool = True  # Ask for confirmation before logging out
-
     # Dice game preferences
     clear_kept_on_roll: bool = False  # Clear kept dice after rolling
     dice_keeping_style: DiceKeepingStyle = field(
@@ -39,7 +36,6 @@ class UserPreferences:
         """Convert to dictionary for storage."""
         return {
             "play_turn_sound": self.play_turn_sound,
-            "confirm_exit": self.confirm_exit,
             "clear_kept_on_roll": self.clear_kept_on_roll,
             "dice_keeping_style": self.dice_keeping_style.value,
         }
@@ -49,7 +45,6 @@ class UserPreferences:
         """Create from dictionary."""
         return cls(
             play_turn_sound=data.get("play_turn_sound", True),
-            confirm_exit=data.get("confirm_exit", True),
             clear_kept_on_roll=data.get("clear_kept_on_roll", False),
             dice_keeping_style=DiceKeepingStyle.from_str(
                 data.get("dice_keeping_style", "playpalace")

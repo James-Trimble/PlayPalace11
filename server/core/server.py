@@ -513,12 +513,6 @@ class Server:
             "option-on" if prefs.play_turn_sound else "option-off",
         )
 
-        # Exit confirmation option
-        exit_confirm_status = Localization.get(
-            user.locale,
-            "option-on" if prefs.confirm_exit else "option-off",
-        )
-
         # Clear kept dice option
         clear_kept_status = Localization.get(
             user.locale,
@@ -545,12 +539,6 @@ class Server:
             ),
             MenuItem(
                 text=Localization.get(
-                    user.locale, "exit-confirm-option", status=exit_confirm_status
-                ),
-                id="exit_confirm",
-            ),
-            MenuItem(
-                text=Localization.get(
                     user.locale, "clear-kept-option", status=clear_kept_status
                 ),
                 id="clear_kept",
@@ -572,15 +560,6 @@ class Server:
         user.stop_music()
         user.play_music("settingsmus.ogg")
         self._user_states[user.username] = {"menu": "options_menu"}
-
-    def _show_logout_confirmation(self, user: NetworkUser) -> None:
-        """Show logout confirmation menu."""
-        items = [
-            MenuItem(text=Localization.get(user.locale, "yes"), id="confirm_logout"),
-            MenuItem(text=Localization.get(user.locale, "no"), id="cancel_logout"),
-        ]
-        user.show_menu(items, id="logout_confirmation", header=Localization.get(user.locale, "confirm-logout"))
-        self._user_states[user.username] = {"menu": "logout_confirmation"}
 
     def _show_language_menu(self, user: NetworkUser) -> None:
         """Show language selection menu."""
@@ -686,8 +665,6 @@ class Server:
             await self._handle_join_selection(user, selection_id, state)
         elif current_menu == "options_menu":
             await self._handle_options_selection(user, selection_id)
-        elif current_menu == "logout_confirmation":
-            await self._handle_logout_confirmation_selection(user, selection_id)
         elif current_menu == "language_menu":
             await self._handle_language_selection(user, selection_id)
         elif current_menu == "dice_keeping_style_menu":
@@ -722,13 +699,8 @@ class Server:
         elif selection_id == "options":
             self._show_options_menu(user)
         elif selection_id == "logout":
-            # Check if user has exit confirmation enabled
-            if user.preferences.confirm_exit:
-                # Show confirmation menu
-                self._show_logout_confirmation(user)
-            else:
-                # Logout immediately
-                await self._perform_logout(user)
+            # Logout immediately
+            await self._perform_logout(user)
 
     async def _handle_options_selection(
         self, user: NetworkUser, selection_id: str
@@ -740,12 +712,6 @@ class Server:
             # Toggle turn sound
             prefs = user.preferences
             prefs.play_turn_sound = not prefs.play_turn_sound
-            self._save_user_preferences(user)
-            self._show_options_menu(user)
-        elif selection_id == "exit_confirm":
-            # Toggle exit confirmation
-            prefs = user.preferences
-            prefs.confirm_exit = not prefs.confirm_exit
             self._save_user_preferences(user)
             self._show_options_menu(user)
         elif selection_id == "clear_kept":
@@ -795,16 +761,6 @@ class Server:
         """Save user preferences to database."""
         prefs_json = json.dumps(user.preferences.to_dict())
         self._db.update_user_preferences(user.username, prefs_json)
-
-    async def _handle_logout_confirmation_selection(
-        self, user: NetworkUser, selection_id: str
-    ) -> None:
-        """Handle logout confirmation selection."""
-        if selection_id == "confirm_logout":
-            await self._perform_logout(user)
-        else:
-            # Cancel logout, return to main menu
-            self._show_main_menu(user)
 
     async def _perform_logout(self, user: NetworkUser) -> None:
         """Perform the logout sequence."""
