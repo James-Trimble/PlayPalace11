@@ -220,3 +220,6 @@ class NetworkManager:
             self.main_window.on_receive_chat(packet)
         elif packet_type == "pong":
             self.main_window.on_server_pong(packet)
+        elif packet_type == "update_available":
+            # Ignore - handled by auto_updater checking directly
+            pass

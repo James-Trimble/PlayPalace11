@@ -15,6 +15,7 @@ from sound_manager import SoundManager
 from network_manager import NetworkManager
 from buffer_system import BufferSystem
 from config_manager import set_item_in_dict
+from auto_updater import AutoUpdater
 
 
 class MainWindow(wx.Frame):
@@ -57,6 +58,9 @@ class MainWindow(wx.Frame):
         self.reconnect_attempts = 0  # Track reconnection attempts
         self.max_reconnect_attempts = 30  # Maximum reconnection attempts
         self.last_server_message = None  # Track last speak message for error display
+        
+        # Initialize auto-updater
+        self.auto_updater = AutoUpdater(self, "11.2.2")
 
         # Store user's options
         # Client-side options (from config file, per-server)
@@ -1140,6 +1144,9 @@ class MainWindow(wx.Frame):
         self.sound_manager.play("welcome.ogg", volume=1.0)
 
         self.add_history(f"Connected to server version {version}")
+        
+        # Check for client updates (silent check)
+        self.auto_updater.check_for_updates(silent=True)
 
     def on_open_server_options(self, packet):
         """Handle open server options packet from server.

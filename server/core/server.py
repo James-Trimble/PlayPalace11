@@ -2147,12 +2147,12 @@ class Server:
         """Handle client update check request."""
         client_version = packet.get("version", "0.0.0")
         
-        # Get latest version info (would normally read from file or endpoint)
-        # For now, return current server version and download info
+        # Get latest version info from download server
+        # Client will check https://playpalace.dev/downloads/latest.json directly
         await client.send({
             "type": "update_available",
             "current_version": VERSION,
-            "download_url": "https://playpalace.dev/releases/latest.json",
+            "download_url": "https://playpalace.dev/downloads/latest.json",
             "changelog": "Check website for latest features and fixes"
         })
 
