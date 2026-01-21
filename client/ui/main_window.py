@@ -1294,6 +1294,7 @@ class MainWindow(wx.Frame):
         """Handle chat packet from server."""
         convo = packet.get("convo")
         lang = packet.get("language")
+        is_emote = packet.get("is_emote", False)
         if lang not in self.lang_codes.values():
             lang = "Other"
         # If language matches, ignore subscription tracking
@@ -1311,13 +1312,18 @@ class MainWindow(wx.Frame):
                 # Check if the user is ignoring this language
                 if not self.client_options["social"]["language_subscriptions"][lang]:
                     return
-        message = (
-            packet.get("sender")
-            + " says "
-            + ("globally" if convo == "global" else "")
-            + ": "
-            + packet.get("message")
-        )
+        
+        # Format message based on whether it's an emote or normal chat
+        if is_emote:
+            message = packet.get("sender") + " " + packet.get("message")
+        else:
+            message = (
+                packet.get("sender")
+                + " says "
+                + ("globally" if convo == "global" else "")
+                + ": "
+                + packet.get("message")
+            )
         # Convo doesn't support muting, or the mute flag is disabled
         if (
             same_user
