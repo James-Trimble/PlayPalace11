@@ -807,6 +807,8 @@ class Server:
             # Send disconnect message and close connection cleanly
             try:
                 await user.connection.send({"type": "disconnect", "reconnect": False})
+                # Give client time to receive and process the disconnect message
+                await asyncio.sleep(0.2)
             except Exception:
                 pass  # Connection might already be closing
             # Close the connection

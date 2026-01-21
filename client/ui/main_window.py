@@ -1029,6 +1029,8 @@ class MainWindow(wx.Frame):
         self.connected = False
         # Don't show error if we're expecting to reconnect
         if not self.expecting_reconnect:
+            # Clear stale server message so error dialog shows clean message
+            self.last_server_message = None
             self._show_connection_error("Connection lost!")
 
     def on_server_disconnect(self, packet):
@@ -1107,8 +1109,9 @@ class MainWindow(wx.Frame):
 
         # Build error message, including last server message if available
         error_body = message
-        if self.last_server_message:
-            error_body += f"\n\nServer message: {self.last_server_message}"
+        # Only show server error messages that are actual error packets
+        if self.last_server_message and isinstance(self.last_server_message, dict) and self.last_server_message.get("type") == "error":
+            error_body += f"\n\nServer error: {self.last_server_message.get('message', '')}"
         error_body += "\n\nThe application will now close."
 
         # Show error dialog
