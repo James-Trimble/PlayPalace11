@@ -53,6 +53,7 @@ class MainWindow(wx.Frame):
         self.network = NetworkManager(self)
         self.connected = False
         self.expecting_reconnect = False  # Track if we're expecting to reconnect
+        self.expecting_disconnect = False  # Suppress connection lost dialog on intentional disconnect
         self.reconnect_attempts = 0  # Track reconnection attempts
         self.max_reconnect_attempts = 30  # Maximum reconnection attempts
         self.last_server_message = None  # Track last speak message for error display
@@ -1028,7 +1029,7 @@ class MainWindow(wx.Frame):
         """Handle connection loss."""
         self.connected = False
         # Don't show error if we're expecting to reconnect
-        if not self.expecting_reconnect:
+        if not self.expecting_reconnect and not self.expecting_disconnect:
             # Clear stale server message so error dialog shows clean message
             self.last_server_message = None
             self._show_connection_error("Connection lost!")
@@ -1061,6 +1062,7 @@ class MainWindow(wx.Frame):
             # Wait 3 seconds then reconnect
             wx.CallLater(3000, reconnect)
         else:
+            self.expecting_disconnect = True
             # Explicit disconnect, close the client
             self.speaker.speak("Disconnected.", interrupt=False)
             wx.CallLater(500, self.Close)
@@ -1126,6 +1128,8 @@ class MainWindow(wx.Frame):
     def on_authorize_success(self, packet):
         """Handle authorization success from server."""
         self.connected = True
+        self.expecting_disconnect = False
+        self.expecting_reconnect = False
         version = packet.get("version", "unknown")
 
         # Update window title with server version
