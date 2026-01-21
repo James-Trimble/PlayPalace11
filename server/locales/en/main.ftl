@@ -76,6 +76,12 @@ option-off = Off
 # Sound options
 turn-sound-option = Turn sound: { $status }
 
+# Exit options
+exit-confirm-option = Exit confirmation: { $status }
+confirm-logout = Are you sure you want to log out?
+yes = Yes
+no = No
+
 # Dice options
 clear-kept-option = Clear kept dice when rolling: { $status }
 dice-keeping-style-option = Dice keeping style: { $style }

@@ -1125,6 +1125,9 @@ class MainWindow(wx.Frame):
         self.connected = True
         version = packet.get("version", "unknown")
 
+        # Update window title with server version
+        self.SetTitle(f"PlayPalace {version}")
+
         # Stop connection loop and play welcome sound
         self.sound_manager.stop_music(fade=False)
         self.sound_manager.play("welcome.ogg", volume=1.0)

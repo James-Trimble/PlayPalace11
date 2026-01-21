@@ -99,6 +99,17 @@ class Server:
         """Stop the server."""
         print("Stopping server...")
 
+        # Broadcast restart warning to all connected clients
+        if self._ws_server:
+            await self._ws_server.broadcast(
+                {
+                    "type": "server_shutdown",
+                    "message": "Server is restarting. Please reconnect in a moment.",
+                }
+            )
+            # Give clients a moment to receive the message
+            await asyncio.sleep(0.5)
+
         # Save all tables
         self._save_tables()
 
@@ -500,6 +511,12 @@ class Server:
             "option-on" if prefs.play_turn_sound else "option-off",
         )
 
+        # Exit confirmation option
+        exit_confirm_status = Localization.get(
+            user.locale,
+            "option-on" if prefs.confirm_exit else "option-off",
+        )
+
         # Clear kept dice option
         clear_kept_status = Localization.get(
             user.locale,
@@ -526,6 +543,12 @@ class Server:
             ),
             MenuItem(
                 text=Localization.get(
+                    user.locale, "exit-confirm-option", status=exit_confirm_status
+                ),
+                id="exit_confirm",
+            ),
+            MenuItem(
+                text=Localization.get(
                     user.locale, "clear-kept-option", status=clear_kept_status
                 ),
                 id="clear_kept",
@@ -547,6 +570,15 @@ class Server:
         user.stop_music()
         user.play_music("settingsmus.ogg")
         self._user_states[user.username] = {"menu": "options_menu"}
+
+    def _show_logout_confirmation(self, user: NetworkUser) -> None:
+        """Show logout confirmation menu."""
+        items = [
+            MenuItem(text=Localization.get(user.locale, "yes"), id="confirm_logout"),
+            MenuItem(text=Localization.get(user.locale, "no"), id="cancel_logout"),
+        ]
+        user.show_menu(items, id="logout_confirmation", header=Localization.get(user.locale, "confirm-logout"))
+        self._user_states[user.username] = {"menu": "logout_confirmation"}
 
     def _show_language_menu(self, user: NetworkUser) -> None:
         """Show language selection menu."""
@@ -652,6 +684,8 @@ class Server:
             await self._handle_join_selection(user, selection_id, state)
         elif current_menu == "options_menu":
             await self._handle_options_selection(user, selection_id)
+        elif current_menu == "logout_confirmation":
+            await self._handle_logout_confirmation_selection(user, selection_id)
         elif current_menu == "language_menu":
             await self._handle_language_selection(user, selection_id)
         elif current_menu == "dice_keeping_style_menu":
@@ -686,8 +720,14 @@ class Server:
         elif selection_id == "options":
             self._show_options_menu(user)
         elif selection_id == "logout":
-            user.speak_l("goodbye")
-            await user.connection.send({"type": "disconnect", "reconnect": False})
+            # Check if user has exit confirmation enabled
+            if user.preferences.confirm_exit:
+                # Show confirmation menu
+                self._show_logout_confirmation(user)
+            else:
+                # Logout immediately
+                user.speak_l("goodbye")
+                await user.connection.send({"type": "disconnect", "reconnect": False})
 
     async def _handle_options_selection(
         self, user: NetworkUser, selection_id: str
@@ -699,6 +739,12 @@ class Server:
             # Toggle turn sound
             prefs = user.preferences
             prefs.play_turn_sound = not prefs.play_turn_sound
+            self._save_user_preferences(user)
+            self._show_options_menu(user)
+        elif selection_id == "exit_confirm":
+            # Toggle exit confirmation
+            prefs = user.preferences
+            prefs.confirm_exit = not prefs.confirm_exit
             self._save_user_preferences(user)
             self._show_options_menu(user)
         elif selection_id == "clear_kept":
@@ -748,6 +794,17 @@ class Server:
         """Save user preferences to database."""
         prefs_json = json.dumps(user.preferences.to_dict())
         self._db.update_user_preferences(user.username, prefs_json)
+
+    async def _handle_logout_confirmation_selection(
+        self, user: NetworkUser, selection_id: str
+    ) -> None:
+        """Handle logout confirmation selection."""
+        if selection_id == "confirm_logout":
+            user.speak_l("goodbye")
+            await user.connection.send({"type": "disconnect", "reconnect": False})
+        else:
+            # Cancel logout, return to main menu
+            self._show_main_menu(user)
 
     async def _handle_language_selection(
         self, user: NetworkUser, selection_id: str
@@ -2059,9 +2116,16 @@ class Server:
         message = packet.get("message", "")
         language = packet.get("language", "English")
 
+        # Handle /me emote
+        is_emote = False
+        if message.startswith("/me "):
+            is_emote = True
+            message = message[4:]  # Remove "/me " prefix
+
         if convo == "table":
             table = self._tables.find_user_table(username)
             if table:
+                # User is at a table, send to table members
                 for member_name in [m.username for m in table.members]:
                     user = self._users.get(member_name)
                     if user:
@@ -2072,21 +2136,23 @@ class Server:
                                 "sender": username,
                                 "message": message,
                                 "language": language,
+                                "is_emote": is_emote,
                             }
                         )
-        elif convo == "lobby":
-            # Send to all users NOT in a game (in lobby)
-            for user in self._users.values():
-                if user and not self._tables.find_user_table(user.username):
-                    await user.connection.send(
-                        {
-                            "type": "chat",
-                            "convo": "lobby",
-                            "sender": username,
-                            "message": message,
-                            "language": language,
-                        }
-                    )
+            else:
+                # User not at a table, send to all users not at tables (lobby chat)
+                for user in self._users.values():
+                    if user and not self._tables.find_user_table(user.username):
+                        await user.connection.send(
+                            {
+                                "type": "chat",
+                                "convo": "table",
+                                "sender": username,
+                                "message": message,
+                                "language": language,
+                                "is_emote": is_emote,
+                            }
+                        )
         elif convo == "global":
             # Broadcast to all users
             if self._ws_server:
@@ -2097,6 +2163,7 @@ class Server:
                         "sender": username,
                         "message": message,
                         "language": language,
+                        "is_emote": is_emote,
                     }
                 )
 

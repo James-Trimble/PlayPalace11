@@ -389,6 +389,18 @@ class UnoGame(Game):
     # ------------------------------------------------------------------
     def _bot_take_turn(self, player: Player) -> None:
         uno_player: UnoPlayer = player  # type: ignore
+        
+        # If bot needs to choose a color after playing wild, choose automatically
+        if self.pending_color_player_id == player.id:
+            # Choose most common color in hand, or red as fallback
+            color_counts = {color: 0 for color in UNO_COLORS}
+            for card in uno_player.hand:
+                if card.color in UNO_COLORS:
+                    color_counts[card.color] += 1
+            chosen_color = max(color_counts, key=color_counts.get) if any(color_counts.values()) else "red"
+            self._action_choose_color(player, f"choose_color_{chosen_color}")
+            return
+        
         playable_indices = [i for i, c in enumerate(uno_player.hand) if self._can_play_card(c)]
         if playable_indices:
             idx = playable_indices[0]
