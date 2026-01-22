@@ -772,9 +772,9 @@ class HoldemGame(Game):
         # Apply raise mode limits
         if self.options.raise_mode != "no_limit":
             pot_total = self.pot_manager.total_pot()
-            limit = pot_total + to_call
+            limit = pot_total + to_call * 2
             if self.options.raise_mode == "double_pot":
-                limit = pot_total * 2 + to_call
+                limit = pot_total * 2 + to_call * 2
             total = min(total, limit)
         if total > p.chips:
             total = p.chips

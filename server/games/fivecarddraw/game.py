@@ -711,7 +711,11 @@ class FiveCardDrawGame(Game):
             self._award_uncontested(active_ids)
             return
         if active_ids and active_ids.issubset(self._all_in_ids()):
-            self._showdown()
+            if self.current_bet_round == 1:
+                self.phase = "draw"
+                self._start_draw_phase()
+            else:
+                self._showdown()
             return
         if self.betting.is_complete(active_ids, self._all_in_ids()):
             if self.current_bet_round == 1:

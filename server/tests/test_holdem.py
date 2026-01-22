@@ -128,3 +128,23 @@ def test_holdem_underfunded_raise_goes_all_in():
     assert player.all_in is True
     if game.betting:
         assert game.betting.current_bet == 90
+
+
+def test_holdem_pot_limit_raise_cap():
+    options = HoldemOptions(raise_mode="pot_limit")
+    game = HoldemGame(options=options)
+    user1 = MockUser("Alice")
+    user2 = MockUser("Bob")
+    game.add_player("Alice", user1)
+    game.add_player("Bob", user2)
+    game.on_start()
+    player = game.current_player
+    assert player is not None
+    if game.betting:
+        game.betting.current_bet = 10
+        game.betting.last_raise_size = 10
+        game.betting.bets[player.id] = 0
+    game.pot_manager.contributions = {"p1": 100}
+    player.chips = 200
+    game._action_raise(player, "200", "raise")
+    assert game.betting.current_bet == 120

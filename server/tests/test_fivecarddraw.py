@@ -141,3 +141,22 @@ def test_draw_underfunded_raise_goes_all_in():
     assert player.all_in is True
     if game.betting:
         assert game.betting.current_bet == 90
+
+
+def test_draw_all_in_still_draws():
+    options = FiveCardDrawOptions(starting_chips=200, ante=100)
+    game = FiveCardDrawGame(options=options)
+    user1 = MockUser("Alice")
+    user2 = MockUser("Bob")
+    game.add_player("Alice", user1)
+    game.add_player("Bob", user2)
+    game.on_start()
+    player = game.current_player
+    assert player is not None
+    player.chips = 0
+    player.all_in = True
+    if game.betting:
+        game.betting.current_bet = 100
+        game.betting.bets[player.id] = 100
+    game._after_action()
+    assert game.phase == "draw"
