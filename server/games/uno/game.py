@@ -17,6 +17,7 @@ from mashumaro.mixins.json import DataClassJSONMixin
 from ..base import Game, Player, GameOptions
 from ..registry import register_game
 from ...game_utils.actions import Action, ActionSet, Visibility
+from ...game_utils.bot_helper import BotHelper
 from ...game_utils.game_result import GameResult, PlayerResult
 from ...game_utils.options import IntOption, option_field
 from ...messages.localization import Localization
@@ -286,9 +287,6 @@ class UnoGame(Game):
         locale = user.locale if user else "en"
         self.broadcast_l("uno-color-chosen", color=self._color_name(color, locale))
 
-        # Schedule wild sound
-        self.schedule_sound("game_uno/wild.ogg", delay_ticks=10)
-
         if value == WILD_DRAW_FOUR:
             target_id = self._get_next_player_id()
             if target_id:
@@ -379,8 +377,9 @@ class UnoGame(Game):
             return
 
         # If we're waiting for color choice from a bot, bot chooses now
-        if self.pending_color_player_id == player.id and player.is_bot:
-            self._bot_choose_color(player)
+        if self.pending_color_player_id == player.id:
+            if player.is_bot:
+                self._bot_choose_color(player)
             return
 
         # Announce turn
@@ -396,6 +395,10 @@ class UnoGame(Game):
     def _end_turn(self) -> None:
         self.advance_turn(announce=False)
         self._start_turn()
+
+    def on_tick(self) -> None:
+        """Called every game tick to update state."""
+        super().on_tick()
 
     # ------------------------------------------------------------------
     # Helpers
