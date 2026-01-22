@@ -1,0 +1,271 @@
+"""Mixin providing lobby action handlers for games."""
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..games.base import Player
+    from ..users.base import User
+    from .actions import ResolvedAction
+
+from ..users.base import MenuItem, EscapeBehavior
+from ..users.bot import Bot
+from ..messages.localization import Localization
+
+
+# Default bot names available for selection
+BOT_NAMES = [
+    "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry",
+    "Ivy", "Jack", "Kate", "Leo", "Mia", "Noah", "Olivia", "Pete",
+    "Quinn", "Rose", "Sam", "Tina", "Uma", "Vic", "Wendy", "Xander",
+    "Yara", "Zack",
+]
+
+
+class LobbyActionsMixin:
+    """Mixin providing lobby action handlers (start, add/remove bot, leave, etc).
+
+    Expects on the Game class:
+        - self.status: str
+        - self.host: str
+        - self.players: list[Player]
+        - self._table: Any
+        - self._users: dict
+        - self._actions_menu_open: set[str]
+        - self.player_action_sets: dict
+        - self.get_user(player) -> User | None
+        - self.broadcast_l(), self.broadcast_sound()
+        - self.prestart_validate(), self.on_start()
+        - self.create_player(), self.setup_player_actions()
+        - self.attach_user(), self.rebuild_all_menus()
+        - self.destroy()
+        - self.get_all_enabled_actions()
+        - self._get_keybind_for_action()
+    """
+
+    # Type hints for expected attributes (satisfied by Game class)
+    status: str
+    host: str
+    players: list["Player"]
+    _table: Any
+    _users: dict[str, "User"]
+    _actions_menu_open: set[str]
+    player_action_sets: dict[str, list]
+
+    def get_user(self, player: "Player") -> "User | None":
+        """Get user for player (implemented in Game)."""
+        raise NotImplementedError
+
+    def broadcast_l(self, message_id: str, buffer: str = "misc", **kwargs) -> None:
+        """Send localized message (implemented in Game or mixin)."""
+        raise NotImplementedError
+
+    def broadcast_sound(self, name: str, volume: int = 100, pan: int = 0, pitch: int = 100) -> None:
+        """Play sound for all (implemented in Game or mixin)."""
+        raise NotImplementedError
+
+    def prestart_validate(self) -> list:
+        """Validate before starting (implemented in Game)."""
+        raise NotImplementedError
+
+    def on_start(self) -> None:
+        """Start the game (implemented in Game)."""
+        raise NotImplementedError
+
+    def create_player(self, player_id: str, name: str, is_bot: bool = False) -> "Player":
+        """Create player (implemented in Game)."""
+        raise NotImplementedError
+
+    def setup_player_actions(self, player: "Player") -> None:
+        """Setup player actions (implemented in Game)."""
+        raise NotImplementedError
+
+    def attach_user(self, player_id: str, user: "User") -> None:
+        """Attach user to player (implemented in Game)."""
+        raise NotImplementedError
+
+    def rebuild_all_menus(self) -> None:
+        """Rebuild all menus (implemented in Game or mixin)."""
+        raise NotImplementedError
+
+    def destroy(self) -> None:
+        """Destroy the game (implemented in Game)."""
+        raise NotImplementedError
+
+    def get_all_enabled_actions(self, player: "Player") -> list["ResolvedAction"]:
+        """Get all enabled actions (implemented in Game)."""
+        raise NotImplementedError
+
+    def _get_keybind_for_action(self, action_id: str) -> str | None:
+        """Get keybind for action (implemented in Game)."""
+        raise NotImplementedError
+
+    def _action_start_game(self, player: "Player", action_id: str) -> None:
+        """Start the game."""
+        # Validate configuration before starting
+        errors = self.prestart_validate()
+        if errors:
+            for error in errors:
+                # Handle both plain strings and (key, kwargs) tuples
+                if isinstance(error, tuple):
+                    error_key, kwargs = error
+                    self.broadcast_l(error_key, buffer="misc", **kwargs)
+                else:
+                    self.broadcast_l(error, buffer="misc")
+            return
+
+        # Announce game is starting
+        self.broadcast_l("game-starting")
+
+        # Start the game (subclasses implement this)
+        self.on_start()
+
+    def _bot_input_add_bot(self, player: "Player") -> str | None:
+        """Get bot name for add_bot action."""
+        return next(
+            (
+                n
+                for n in BOT_NAMES
+                if n.lower() not in {x.name.lower() for x in self.players}
+            ),
+            None,
+        )
+
+    def _action_add_bot(self, player: "Player", bot_name: str, action_id: str) -> None:
+        """Add a bot with the selected name."""
+        # If blank, use an available name from the list
+        if not bot_name.strip():
+            bot_name = next(
+                (
+                    n
+                    for n in BOT_NAMES
+                    if n.lower() not in {x.name.lower() for x in self.players}
+                ),
+                None,
+            )
+            if not bot_name:
+                # No names available
+                user = self.get_user(player)
+                if user:
+                    user.speak_l("no-bot-names-available")
+                return
+
+        bot_user = Bot(bot_name)
+        bot_player = self.create_player(bot_user.uuid, bot_name, is_bot=True)
+        self.players.append(bot_player)
+        self.attach_user(bot_player.id, bot_user)
+        # Set up action sets for the bot
+        self.setup_player_actions(bot_player)
+        self.broadcast_l("table-joined", player=bot_name)
+        self.broadcast_sound("join.ogg")
+        self.rebuild_all_menus()
+
+    def _action_remove_bot(self, player: "Player", action_id: str) -> None:
+        """Remove the last bot from the game."""
+        for i in range(len(self.players) - 1, -1, -1):
+            if self.players[i].is_bot:
+                bot = self.players.pop(i)
+                # Clean up action sets
+                self.player_action_sets.pop(bot.id, None)
+                self._users.pop(bot.id, None)
+                self.broadcast_l("table-left", player=bot.name)
+                self.broadcast_sound("leave.ogg")
+                break
+        self.rebuild_all_menus()
+
+    def _action_toggle_spectator(self, player: "Player", action_id: str) -> None:
+        """Toggle spectator mode for a player."""
+        if self.status != "waiting":
+            return  # Can only toggle before game starts
+
+        player.is_spectator = not player.is_spectator
+        if player.is_spectator:
+            self.broadcast_l("now-spectating", player=player.name)
+        else:
+            self.broadcast_l("now-playing", player=player.name)
+
+        self.rebuild_all_menus()
+
+    def _action_leave_game(self, player: "Player", action_id: str) -> None:
+        """Leave the game."""
+        if self.status == "playing" and not player.is_bot:
+            # Mid-game: replace human with bot instead of removing
+            # Keep the same player ID so they can rejoin and take over
+            player.is_bot = True
+            self._users.pop(player.id, None)
+
+            # Create a bot user with the same UUID to control this player
+            bot_user = Bot(player.name, uuid=player.id)
+            self.attach_user(player.id, bot_user)
+
+            self.broadcast_l("player-replaced-by-bot", player=player.name)
+            self.broadcast_sound("leave.ogg")
+
+            # Check if any humans remain
+            has_humans = any(not p.is_bot for p in self.players)
+            if not has_humans:
+                # Destroy the game - no humans left
+                self.destroy()
+                return
+
+            # Rebuild menus for remaining players
+            self.rebuild_all_menus()
+            return
+
+        # Lobby or bot leaving: fully remove the player
+        self.players = [p for p in self.players if p.id != player.id]
+        self.player_action_sets.pop(player.id, None)
+        self._users.pop(player.id, None)
+
+        self.broadcast_l("table-left", player=player.name)
+        self.broadcast_sound("leave.ogg")
+
+        # Check if any humans remain
+        has_humans = any(not p.is_bot for p in self.players)
+        if not has_humans:
+            # Destroy the game - no humans left
+            self.destroy()
+            return
+
+        if self.status == "waiting":
+            # If host left, assign new host
+            if player.name == self.host and self.players:
+                # Find first human to be new host
+                for p in self.players:
+                    if not p.is_bot:
+                        self.host = p.name
+                        self.broadcast_l("new-host", player=p.name)
+                        break
+
+            self.rebuild_all_menus()
+
+    def _action_show_actions_menu(self, player: "Player", action_id: str) -> None:
+        """Show the F5 actions menu."""
+        items = []
+        for resolved in self.get_all_enabled_actions(player):
+            label = resolved.label
+            keybind_key = self._get_keybind_for_action(resolved.action.id)
+            if keybind_key:
+                label += f" ({keybind_key.upper()})"
+            items.append(MenuItem(text=label, id=resolved.action.id))
+
+        user = self.get_user(player)
+        if user and items:
+            # Add "Go back" option at the end
+            items.append(
+                MenuItem(text=Localization.get(user.locale, "go-back"), id="go_back")
+            )
+            self._actions_menu_open.add(player.id)
+            user.speak_l("context-menu")
+            user.show_menu(
+                "actions_menu",
+                items,
+                multiletter=True,
+                escape_behavior=EscapeBehavior.SELECT_LAST,
+            )
+        elif user:
+            user.speak_l("no-actions-available")
+
+    def _action_save_table(self, player: "Player", action_id: str) -> None:
+        """Save the current table state (host only). This destroys the table."""
+        if self._table:
+            self._table.save_and_close(player.name)
