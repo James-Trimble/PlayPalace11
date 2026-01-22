@@ -4,6 +4,7 @@
 - Add two poker games (5-Card Draw and Texas Hold’em) with shared infrastructure.
 - Keep rules extensible for future variants (Omaha, Stud, etc.).
 - Standardize betting actions, pot handling, and hand evaluation outputs.
+- Add a new game category: **Poker**.
 
 ## File Placement
 This plan lives in `server/plans/poker.md` to align with other design docs.
@@ -50,6 +51,7 @@ Add a “hand potential” description function:
 - **M**: Minimum raise amount.
 - **L**: Action log for the current betting round.
 - **Shift+T**: Turn timer remaining (fallback message if timer is disabled).
+- **V**: Blind/ante timer remaining, or “Blinds will raise next hand.”
 
 ### Card Readout Shortcuts
 - **O**: Reveal both hole cards (end of hand only).
@@ -83,8 +85,23 @@ Add a “hand potential” description function:
 - Record key actions (bets, raises, folds, all‑ins, pots).
 - Useful for bug reports, bot tuning, and replay.
 
-## Reconnection Handling (Later)
+## Reconnection Handling (look at how this is handled globally)
 - Restore hand state, player stacks, and timers on reconnect.
+
+## Blind Timer Behavior (Tournament)
+- Timer counts down per hand; when it reaches 0, announce “Blinds will raise next hand.”
+- When blinds increase, reset the timer.
+
+## Audio & Music (Placeholder Assets)
+- **Music**: use 3‑Card Poker music for now.
+- **Win sounds**: reuse Blackjack win sounds for hand wins.
+- **Deal/Bet**: reuse 3‑Card Poker deal/bet sounds.
+- **Draw sounds**: use `game_cards/draw*.ogg` (cycle variants when drawing multiple cards).
+  - Delay **300 ms** between draw sounds when drawing multiple cards.
+  - Use draw sounds for Hold’em community cards (flop/turn/river) and draw replacements.
+- **New hand**: `game_cards/small_shuffle.ogg` once per hand, then deal sounds
+  (2 cards in Hold’em, 5 cards in Draw).
+- **Turn sound**: use the standard “your turn” sound from other games.
 
 ### Raise Modes (Options)
 - **No‑Limit** (default): raise to any amount up to stack.
@@ -105,9 +122,9 @@ Add a “hand potential” description function:
 6. **Showdown** → evaluate hands → pay pot(s).
 
 ### Options
-- Starting chips.
-- Turn timer (seconds).
-- Ante amount.
+- Starting chips: 100–1,000,000 (default 20,000).
+- Turn timer (seconds): 5, 10, 15, 20, 30, 45, 60, 90, unlimited.
+- Ante amount (draw only): 0–stack size (default 100).
 
 ## Texas Hold’em
 ### Core Flow
@@ -125,12 +142,13 @@ Add a “hand potential” description function:
 - Big blind acts first post‑flop.
 
 ### Options
-- Starting chips.
-- Small blind / big blind.
-- Ante amount.
-- Turn timer (seconds).
+- Starting chips: 100–1,000,000 (default 20,000).
+- Small blind / big blind (default 100/200).
+- Ante amount (optional, default 0; can phase in with blind schedule).
+- Turn timer (seconds): 5, 10, 15, 20, 30, 45, 60, 90, unlimited.
 - Raise mode (no‑limit / pot‑limit / double‑pot‑limit).
 - Max raises per betting round (including “unlimited”).
+- Blind/ante increase timer (tournament only): 5, 10, 15, 20, 30 minutes.
 
 ## Scoring/Scoreboard
 - Use the standard TeamManager scoreboard to report chip counts.
