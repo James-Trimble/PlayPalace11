@@ -367,7 +367,6 @@ class UnoGame(Game):
             self.pending_draw_target_id = None
             uno_player: UnoPlayer = player  # type: ignore
             self._draw_cards(uno_player, amount)
-            self.schedule_sound("game_uno/buzzerplay.ogg", delay_ticks=5)
             self.broadcast_l("uno-draw-penalty", player=player.name, count=amount)
             self._update_all_card_actions()
             if player.is_bot:
