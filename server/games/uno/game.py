@@ -1,12 +1,10 @@
 """
 UNO Game Implementation for PlayPalace v11.
 
-Simplified UNO rules:
-- Match by color or value, or play Wild / Wild Draw Four.
-- Skip skips the next player.
-- Reverse flips direction (acts like Skip in 2-player games).
-- Draw Two and Wild Draw Four force the next player to draw and lose their turn.
-- First to empty their hand wins.
+Fixed version with:
+- Proper bot color selection after wilds
+- No duplicate draw/show-top actions
+- Correct sound scheduling
 """
 
 from __future__ import annotations
@@ -288,13 +286,17 @@ class UnoGame(Game):
         locale = user.locale if user else "en"
         self.broadcast_l("uno-color-chosen", color=self._color_name(color, locale))
 
+        # Schedule wild sound
+        self.schedule_sound("game_uno/wild.ogg", delay_ticks=10)
+
         if value == WILD_DRAW_FOUR:
             target_id = self._get_next_player_id()
             if target_id:
                 self.pending_draw_target_id = target_id
                 self.pending_draw_amount = 4
+
         self._update_all_card_actions()
-        self._after_card_play(player)
+        self._end_turn()
 
     def _action_show_top(self, player: Player, action_id: str) -> None:
         if not self.discard_pile:
@@ -324,15 +326,21 @@ class UnoGame(Game):
             return Visibility.HIDDEN
         if player != self.current_player:
             return Visibility.HIDDEN
+        if player.id == self.pending_color_player_id:
+            return Visibility.HIDDEN
         return Visibility.VISIBLE
 
     def _is_show_top_enabled(self, player: Player) -> str | None:
         if self.status != "playing":
             return "action-not-playing"
+        if self.pending_color_player_id:
+            return "uno-need-color"
         return None
 
     def _is_show_top_hidden(self, player: Player) -> Visibility:
         if self.status != "playing":
+            return Visibility.HIDDEN
+        if self.pending_color_player_id:
             return Visibility.HIDDEN
         return Visibility.VISIBLE
 
@@ -361,13 +369,18 @@ class UnoGame(Game):
             self.pending_draw_target_id = None
             uno_player: UnoPlayer = player  # type: ignore
             self._draw_cards(uno_player, amount)
-            self.play_sound("game_uno/buzzerplay.ogg")
+            self.schedule_sound("game_uno/buzzerplay.ogg", delay_ticks=5)
             self.broadcast_l("uno-draw-penalty", player=player.name, count=amount)
             self._update_all_card_actions()
             if player.is_bot:
                 self._bot_take_turn(player)
             else:
                 self.rebuild_all_menus()
+            return
+
+        # If we're waiting for color choice from a bot, bot chooses now
+        if self.pending_color_player_id == player.id and player.is_bot:
+            self._bot_choose_color(player)
             return
 
         # Announce turn
@@ -387,19 +400,18 @@ class UnoGame(Game):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _bot_choose_color(self, player: Player) -> None:
+        """Bot automatically chooses the most common color in hand."""
+        uno_player: UnoPlayer = player  # type: ignore
+        color_counts = {color: 0 for color in UNO_COLORS}
+        for card in uno_player.hand:
+            if card.color in UNO_COLORS:
+                color_counts[card.color] += 1
+        chosen_color = max(color_counts, key=color_counts.get) if any(color_counts.values()) else "red"
+        self._action_choose_color(player, f"choose_color_{chosen_color}")
+
     def _bot_take_turn(self, player: Player) -> None:
         uno_player: UnoPlayer = player  # type: ignore
-        
-        # If bot needs to choose a color after playing wild, choose automatically
-        if self.pending_color_player_id == player.id:
-            # Choose most common color in hand, or red as fallback
-            color_counts = {color: 0 for color in UNO_COLORS}
-            for card in uno_player.hand:
-                if card.color in UNO_COLORS:
-                    color_counts[card.color] += 1
-            chosen_color = max(color_counts, key=color_counts.get) if any(color_counts.values()) else "red"
-            self._action_choose_color(player, f"choose_color_{chosen_color}")
-            return
         
         playable_indices = [i for i, c in enumerate(uno_player.hand) if self._can_play_card(c)]
         if playable_indices:
@@ -437,13 +449,16 @@ class UnoGame(Game):
         }
         sound = sound_map.get(card.value)
         if sound:
-            self.play_sound(sound)
+            self.schedule_sound(sound, delay_ticks=5)
 
         # Wild cards require color choice
         if card.is_wild():
             self.pending_color_player_id = player.id
             self.pending_color_value = card.value
             self.rebuild_all_menus()
+            # If bot played the wild, it should choose color immediately
+            if player.is_bot:
+                self._bot_choose_color(player)
             return
 
         # Apply special effects
@@ -467,10 +482,10 @@ class UnoGame(Game):
     def _after_card_play(self, player: Player) -> None:
         uno_player: UnoPlayer = player  # type: ignore
         if len(uno_player.hand) == 1:
-            self.play_sound("game_uno/uno.ogg")
+            self.schedule_sound("game_uno/uno.ogg", delay_ticks=10)
             self.broadcast_l("uno-uno-call", player=player.name)
         if len(uno_player.hand) == 0:
-            self.play_sound("game_uno/wingame.ogg")
+            self.schedule_sound("game_uno/wingame.ogg", delay_ticks=15)
             self.broadcast_l("uno-winner", player=player.name)
             self.finish_game()
             return
