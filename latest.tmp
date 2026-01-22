@@ -1,0 +1,6 @@
+{
+  " version\: \11.2.2\,
+ \sha256\: \7d59c81ed4fc107a57593a4f5fa3a8fe6eece060d413b8a4ead6d77efb8dd30c\,
+ \url\: \https://playpalace.dev/releases/PlayPalace-11.2.2.zip\,
+ \whats_new\: \Rebuilt 11.2.2 client: suppresses connection-lost dialog on intentional logout.\,
+ \notes\: \Server unchanged
