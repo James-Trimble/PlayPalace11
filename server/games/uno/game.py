@@ -165,25 +165,8 @@ class UnoGame(Game):
         user = self.get_user(player)
         locale = user.locale if user else "en"
 
-        action_set.add(
-            Action(
-                id="draw_card",
-                label=Localization.get(locale, "uno-draw"),
-                handler="_action_draw_card",
-                is_enabled="_is_draw_enabled",
-                is_hidden="_is_draw_hidden",
-            )
-        )
-
-        action_set.add(
-            Action(
-                id="show_top",
-                label=Localization.get(locale, "uno-show-top"),
-                handler="_action_show_top",
-                is_enabled="_is_show_top_enabled",
-                is_hidden="_is_show_top_hidden",
-            )
-        )
+        # Draw card and show top are shortcuts only, not menu actions
+        # (see setup_keybinds for shortcut definitions)
 
         # Color choice actions (shown only when pending_color_player_id matches)
         for color in UNO_COLORS:
