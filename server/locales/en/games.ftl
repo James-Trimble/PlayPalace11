@@ -98,13 +98,17 @@ rank-king-plural = kings
 
 # Poker hand descriptions
 poker-high-card-with = { $high } high, with { $rest }
+poker-high-card = { $high } high
 poker-pair-with = Pair of { $pair }, with { $rest }
+poker-pair = Pair of { $pair }
 poker-two-pair-with = Two Pair, { $high } and { $low }, with { $kicker }
 poker-trips-with = Three of a Kind, { $trips }, with { $rest }
+poker-trips = Three of a Kind, { $trips }
 poker-straight-high = { $high } high Straight
 poker-flush-high-with = { $high } high Flush, with { $rest }
 poker-full-house = Full House, { $trips } over { $pair }
 poker-quads-with = Four of a Kind, { $quads }, with { $kicker }
+poker-quads = Four of a Kind, { $quads }
 poker-straight-flush-high = { $high } high Straight Flush
 poker-unknown-hand = Unknown hand
 

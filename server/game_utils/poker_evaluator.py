@@ -177,6 +177,35 @@ def describe_best_hand(cards: list[Card], locale: str = "en") -> tuple[str, list
     return describe_hand(score, locale), best
 
 
+def describe_partial_hand(cards: list[Card], locale: str = "en") -> str:
+    """Describe a partial hand without inventing missing cards."""
+    if len(cards) >= 5:
+        score, _ = best_hand(cards)
+        return describe_hand(score, locale)
+    ranks = [_rank_value(card.rank) for card in cards]
+    counts = Counter(ranks)
+    by_count = sorted(((c, r) for r, c in counts.items()), reverse=True)
+    if not by_count:
+        return Localization.get(locale, "poker-unknown-hand")
+    if by_count[0][0] == 4:
+        quads = _cap(_rank_name_plural(by_count[0][1], locale))
+        return Localization.get(locale, "poker-quads", quads=quads)
+    if by_count[0][0] == 3:
+        trips = _cap(_rank_name_plural(by_count[0][1], locale))
+        kickers = _rank_list([r for r in ranks if r != by_count[0][1]], locale, cap=True)
+        if kickers:
+            return Localization.get(locale, "poker-trips-with", trips=trips, rest=kickers)
+        return Localization.get(locale, "poker-trips", trips=trips)
+    if by_count[0][0] == 2:
+        pair = _cap(_rank_name_plural(by_count[0][1], locale))
+        kickers = _rank_list([r for r in ranks if r != by_count[0][1]], locale, cap=True)
+        if kickers:
+            return Localization.get(locale, "poker-pair-with", pair=pair, rest=kickers)
+        return Localization.get(locale, "poker-pair", pair=pair)
+    high = _cap(_rank_name(max(ranks), locale))
+    return Localization.get(locale, "poker-high-card", high=high)
+
+
 def _rank_value(rank: int) -> int:
     """Convert Card.rank to standard poker rank (Ace high)."""
     return 14 if rank == 1 else rank

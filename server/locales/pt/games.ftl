@@ -98,12 +98,16 @@ rank-king-plural = reis
 
 # Descrições de mãos de pôquer
 poker-high-card-with = Carta alta, { $high }, com { $rest }
+poker-high-card = Carta alta, { $high }
 poker-pair-with = Par de { $pair }, com { $rest }
+poker-pair = Par de { $pair }
 poker-two-pair-with = Dois pares, { $high } e { $low }, com { $kicker }
 poker-trips-with = Trinca de { $trips }, com { $rest }
+poker-trips = Trinca de { $trips }
 poker-straight-high = Sequência, { $high } alta
 poker-flush-high-with = Flush, { $high } alto, com { $rest }
 poker-full-house = Full house, { $trips } sobre { $pair }
 poker-quads-with = Quadra de { $quads }, com { $kicker }
+poker-quads = Quadra de { $quads }
 poker-straight-flush-high = Straight flush, { $high } alto
 poker-unknown-hand = Mão desconhecida

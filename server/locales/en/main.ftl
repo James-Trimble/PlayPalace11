@@ -4,6 +4,7 @@
 category-card-games = Card Games
 category-dice-games = Dice Games
 category-rb-play-center = RB Play Center
+category-poker = Poker
 category-uncategorized = Uncategorized
 
 # Menu titles
