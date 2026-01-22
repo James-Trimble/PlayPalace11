@@ -41,7 +41,7 @@ def test_draw_bot_game_completes():
         bot = Bot(f"Bot{i}")
         game.add_player(f"Bot{i}", bot)
     game.on_start()
-    for _ in range(20000):
+    for _ in range(40000):
         if game.status == "finished":
             break
         game.on_tick()

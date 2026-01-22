@@ -733,7 +733,7 @@ class HoldemGame(Game):
         self._sync_team_scores()
         self._after_action()
 
-    def _bot_input_raise(self, player: Player, text: str) -> str:
+    def _bot_input_raise(self, player: Player) -> str:
         return "1"
 
     def _action_all_in(self, player: Player, action_id: str) -> None:

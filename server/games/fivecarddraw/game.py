@@ -428,7 +428,7 @@ class FiveCardDrawGame(Game):
             return
         self.announce_turn(turn_sound="game_3cardpoker/turn.ogg")
         if p.is_bot:
-            BotHelper.jolt_bot(p, ticks=random.randint(15, 25))
+            BotHelper.jolt_bot(p, ticks=random.randint(5, 10))
         self._start_turn_timer()
         self.rebuild_all_menus()
 
@@ -464,22 +464,55 @@ class FiveCardDrawGame(Game):
         if self.current_player != player:
             return None
         if self.phase == "draw":
-            # Simple bot: discard up to 2 random cards if no pair
-            score, _ = best_hand(player.hand)
-            if score[0] <= 0:
-                player.to_discard = set(random.sample(range(len(player.hand)), k=min(2, len(player.hand))))
+            if len(player.hand) >= 5:
+                score, _ = best_hand(player.hand)
+                category = score[0]
             else:
-                player.to_discard = set()
+                category = 0
+            ranks = [card.rank for card in player.hand]
+            counts = {}
+            for r in ranks:
+                counts[r] = counts.get(r, 0) + 1
+            # Determine discard indices based on hand strength
+            keep_ranks: set[int] = set()
+            if category >= 4:  # straight or better
+                keep_ranks = set(ranks)
+            elif category == 3:  # three of a kind
+                keep_ranks = {r for r, c in counts.items() if c == 3}
+            elif category == 2:  # two pair
+                keep_ranks = {r for r, c in counts.items() if c == 2}
+            elif category == 1:  # one pair
+                keep_ranks = {r for r, c in counts.items() if c == 2}
+            else:  # high card
+                keep_ranks = set()
+
+            discard_indices = [i for i, card in enumerate(player.hand) if card.rank not in keep_ranks]
+            max_discards = 4 if any(card.rank == 1 for card in player.hand) else 3
+            if len(discard_indices) > max_discards:
+                discard_indices = discard_indices[:max_discards]
+            player.to_discard = set(discard_indices)
             return "draw_cards"
         if self.betting:
             to_call = self.betting.amount_to_call(player.id)
+            if len(player.hand) >= 5:
+                score, _ = best_hand(player.hand)
+                category = score[0]
+            else:
+                category = 0
+            min_raise = max(self.betting.last_raise_size, 1)
+            can_raise = self.betting.can_raise() and (to_call + min_raise) <= player.chips
             if to_call == 0:
+                if can_raise and category >= 1:
+                    return "raise"
                 return "call"
             # Simple strength check
-            score, _ = best_hand(player.hand)
-            if score[0] >= 1 and to_call <= max(1, player.chips // 10):
+            if to_call >= player.chips:
                 return "call"
-            if to_call <= max(1, player.chips // 20):
+            if category >= 2 and to_call <= max(1, player.chips // 6):
+                return "call"
+            if category >= 1 and to_call <= max(1, player.chips // 12):
+                return "call"
+            if to_call <= max(1, player.chips // 25):
                 return "call"
             return "fold"
         return None
@@ -550,7 +583,18 @@ class FiveCardDrawGame(Game):
         self._sync_team_scores()
         self._after_action()
 
-    def _bot_input_raise(self, player: Player, text: str) -> str:
+    def _bot_input_raise(self, player: Player) -> str:
+        if isinstance(player, FiveCardDrawPlayer):
+            if not self.betting:
+                return "1"
+            to_call = self.betting.amount_to_call(player.id)
+            min_raise = max(self.betting.last_raise_size, 1)
+            max_raise = max(0, player.chips - to_call)
+            if max_raise < min_raise:
+                return str(min_raise)
+            desired = max(min_raise, min(100, player.chips // 3))
+            amount = min(desired, max_raise)
+            return str(amount)
         return "1"
 
     def _action_all_in(self, player: Player, action_id: str) -> None:
