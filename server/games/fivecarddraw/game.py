@@ -776,10 +776,11 @@ class FiveCardDrawGame(Game):
                 continue
             share = pot.amount // len(winners)
             remainder = pot.amount % len(winners)
-            for w in winners:
+            ordered_winners = self._order_winners_by_button(winners)
+            for w in ordered_winners:
                 w.chips += share
             if remainder > 0:
-                winners[0].chips += remainder
+                ordered_winners[0].chips += remainder
             desc = describe_hand(best_score, "en")
             if len(winners) == 1:
                 self.play_sound(random.choice(["game_blackjack/win1.ogg", "game_blackjack/win2.ogg", "game_blackjack/win3.ogg"]))
@@ -789,6 +790,20 @@ class FiveCardDrawGame(Game):
                 self.play_sound(random.choice(["game_blackjack/win1.ogg", "game_blackjack/win2.ogg", "game_blackjack/win3.ogg"]))
                 self.broadcast_l("poker-players-split-pot", players=names, amount=pot.amount, hand=desc)
         self._sync_team_scores()
+
+    def _order_winners_by_button(self, winners: list[FiveCardDrawPlayer]) -> list[FiveCardDrawPlayer]:
+        if len(winners) <= 1:
+            return winners
+        active_ids = [p.id for p in self.get_active_players()]
+        if not active_ids:
+            return winners
+        button_id = self.table_state.get_button_id(active_ids)
+        if button_id in active_ids:
+            start_index = (active_ids.index(button_id) + 1) % len(active_ids)
+            order = active_ids[start_index:] + active_ids[:start_index]
+        else:
+            order = active_ids
+        return sorted(winners, key=lambda p: order.index(p.id) if p.id in order else len(order))
 
     # ==========================================================================
     # Utility / status actions
