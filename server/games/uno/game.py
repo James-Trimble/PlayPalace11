@@ -445,7 +445,6 @@ class UnoGame(Game):
         sound_map = {
             "skip": "game_uno/skip.ogg",
             "reverse": "game_uno/reverse.ogg",
-            "draw2": "game_uno/buzzerpress.ogg",
             WILD: "game_uno/wild.ogg",
             WILD_DRAW_FOUR: "game_uno/wild4.ogg",
         }
