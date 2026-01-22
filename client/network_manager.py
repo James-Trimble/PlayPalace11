@@ -207,6 +207,8 @@ class NetworkManager:
         elif packet_type == "game_list":
             self.main_window.on_server_game_list(packet)
         elif packet_type == "disconnect":
+            # Prevent connection-lost dialog when server intentionally disconnects
+            self.should_stop = True
             self.main_window.on_server_disconnect(packet)
         elif packet_type == "update_options_lists":
             self.main_window.on_update_options_lists(packet)
@@ -220,6 +222,3 @@ class NetworkManager:
             self.main_window.on_receive_chat(packet)
         elif packet_type == "pong":
             self.main_window.on_server_pong(packet)
-        elif packet_type == "update_available":
-            # Ignore - handled by auto_updater checking directly
-            pass
