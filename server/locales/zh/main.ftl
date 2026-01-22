@@ -14,6 +14,10 @@ tables-menu-title = 可用桌台
 
 # 菜单项目
 play = 开始游戏
+saved-tables = 保存的桌台
+whos-online = 谁在线
+leaderboards = 排行榜
+my-stats = 我的统计
 options = 设置
 logout = 退出登录
 back = 返回
@@ -86,6 +90,7 @@ no-scores-available = 没有可用分数。
 # 保存/恢复
 saved-tables = 已保存的桌台
 no-saved-tables = 您没有已保存的桌台。
+no-players-online = 目前没有玩家在线。
 restore-table = 恢复
 delete-saved-table = 删除
 saved-table-deleted = 已删除保存的桌台。

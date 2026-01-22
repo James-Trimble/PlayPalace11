@@ -14,6 +14,10 @@ tables-menu-title = Available Tables
 
 # Menu items
 play = Play
+saved-tables = Saved Tables
+whos-online = Who's Online
+leaderboards = Leaderboards
+my-stats = My Stats
 options = Options
 logout = Logout
 back = Back
@@ -99,6 +103,7 @@ estimate-already-running = Duration estimation already in progress.
 # Save/Restore
 saved-tables = Saved Tables
 no-saved-tables = You have no saved tables.
+no-players-online = No players are currently online.
 restore-table = Restore
 delete-saved-table = Delete
 saved-table-deleted = Saved table deleted.

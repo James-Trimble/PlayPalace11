@@ -6,6 +6,7 @@ from pathlib import Path
 import json
 
 from .tick import TickScheduler
+from .presence import PresenceTracker
 from ..network.websocket_server import WebSocketServer, ClientConnection
 from ..persistence.database import Database
 from ..auth.auth import AuthManager
@@ -59,6 +60,7 @@ class Server:
         # User tracking
         self._users: dict[str, NetworkUser] = {}  # username -> NetworkUser
         self._user_states: dict[str, dict] = {}  # username -> UI state
+        self._presence = PresenceTracker()  # Track online player presence
 
         # Initialize localization
         if locales_dir is None:
@@ -191,12 +193,19 @@ class Server:
         status_data = {
             "version": VERSION,
             "online": True,
-            "players": len(self._users),
-            "updated": int(time.time())
+            "timestamp": int(time.time()),
+            "players": {
+                "count": self._presence.get_player_count(),
+                "list": self._presence.get_online_players(),
+            },
+            "tables": {
+                "count": len(self._tables._tables),
+                "active": sum(1 for t in self._tables._tables.values() if t.game and t.game.status == "playing"),
+            },
         }
         
         try:
-            self._status_file.write_text(json.dumps(status_data))
+            self._status_file.write_text(json.dumps(status_data, indent=2))
         except Exception as e:
             print(f"Failed to write status file: {e}")
 
@@ -210,6 +219,8 @@ class Server:
         if client.username:
             # Broadcast offline announcement to all users (including the disconnecting user)
             self._broadcast_presence_l("user-offline", client.username, "offline.ogg")
+            # Track player going offline
+            self._presence.logout(client.username)
             # Clean up user state
             self._users.pop(client.username, None)
             self._user_states.pop(client.username, None)
@@ -243,6 +254,10 @@ class Server:
             await self._handle_chat(client, packet)
         elif packet_type == "ping":
             await self._handle_ping(client)
+        elif packet_type == "check_update":
+            await self._handle_check_update(client, packet)
+        elif packet_type == "get_online_players":
+            await self._handle_get_online_players(client, packet)
 
     async def _handle_authorize(self, client: ClientConnection, packet: dict) -> None:
         """Handle authorization packet."""
@@ -280,6 +295,9 @@ class Server:
                 pass  # Use defaults on error
         user = NetworkUser(username, locale, client, uuid=user_uuid, preferences=preferences)
         self._users[username] = user
+
+        # Track player coming online
+        self._presence.login(username)
 
         # Broadcast online announcement to all users (including the new user)
         self._broadcast_presence_l("user-online", username, "online.ogg")
@@ -383,6 +401,9 @@ class Server:
             MenuItem(text=Localization.get(user.locale, "play"), id="play"),
             MenuItem(
                 text=Localization.get(user.locale, "saved-tables"), id="saved_tables"
+            ),
+            MenuItem(
+                text=Localization.get(user.locale, "whos-online"), id="whos_online"
             ),
             MenuItem(
                 text=Localization.get(user.locale, "leaderboards"), id="leaderboards"
@@ -609,6 +630,28 @@ class Server:
             "save_id": save_id,
         }
 
+    def _show_whos_online_menu(self, user: NetworkUser) -> None:
+        """Show list of online players."""
+        online_players = self._presence.get_online_players()
+        
+        if not online_players:
+            user.speak_l("no-players-online")
+            self._show_main_menu(user)
+            return
+        
+        items = []
+        for player in online_players:
+            items.append(MenuItem(text=player, id=f"player_{player}"))
+        items.append(MenuItem(text=Localization.get(user.locale, "back"), id="back"))
+        
+        user.show_menu(
+            "whos_online_menu",
+            items,
+            multiletter=False,
+            escape_behavior=EscapeBehavior.SELECT_LAST,
+        )
+        self._user_states[user.username] = {"menu": "whos_online_menu"}
+
     async def _handle_menu(self, client: ClientConnection, packet: dict) -> None:
         """Handle menu selection."""
         username = client.username
@@ -658,6 +701,8 @@ class Server:
             await self._handle_saved_tables_selection(user, selection_id, state)
         elif current_menu == "saved_table_actions_menu":
             await self._handle_saved_table_actions_selection(user, selection_id, state)
+        elif current_menu == "whos_online_menu":
+            await self._handle_whos_online_selection(user, selection_id, state)
         elif current_menu == "leaderboards_menu":
             await self._handle_leaderboards_selection(user, selection_id, state)
         elif current_menu == "leaderboard_types_menu":
@@ -677,6 +722,8 @@ class Server:
             self._show_categories_menu(user)
         elif selection_id == "saved_tables":
             self._show_saved_tables_menu(user)
+        elif selection_id == "whos_online":
+            self._show_whos_online_menu(user)
         elif selection_id == "leaderboards":
             self._show_leaderboards_menu(user)
         elif selection_id == "my_stats":
@@ -952,6 +999,16 @@ class Server:
             self._show_saved_tables_menu(user)
         elif selection_id == "back":
             self._show_saved_tables_menu(user)
+
+    async def _handle_whos_online_selection(
+        self, user: NetworkUser, selection_id: str, state: dict
+    ) -> None:
+        """Handle who's online menu selection."""
+        if selection_id == "back":
+            self._show_main_menu(user)
+        # Selections of player names just go back to list
+        else:
+            self._show_whos_online_menu(user)
 
     async def _restore_saved_table(self, user: NetworkUser, save_id: int) -> None:
         """Restore a saved table."""
@@ -2079,6 +2136,27 @@ class Server:
         """Handle ping request - respond immediately with pong."""
         await client.send({"type": "pong"})
 
+    async def _handle_check_update(self, client: ClientConnection, packet: dict) -> None:
+        """Handle client update check request."""
+        client_version = packet.get("version", "0.0.0")
+        
+        # Get latest version info (would normally read from file or endpoint)
+        # For now, return current server version and download info
+        await client.send({
+            "type": "update_available",
+            "current_version": VERSION,
+            "download_url": "https://playpalace.dev/releases/latest.json",
+            "changelog": "Check website for latest features and fixes"
+        })
+
+    async def _handle_get_online_players(self, client: ClientConnection, packet: dict) -> None:
+        """Handle request for list of online players."""
+        players = self._presence.get_online_players_detailed()
+        await client.send({
+            "type": "online_players_list",
+            "count": len(players),
+            "players": players,
+        })
 
 async def run_server(
     host: str = "0.0.0.0",

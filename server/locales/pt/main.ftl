@@ -14,6 +14,10 @@ tables-menu-title = Mesas Disponíveis
 
 # Itens de menu
 play = Jogar
+saved-tables = Mesas Salvas
+whos-online = Quem Está Online
+leaderboards = Classificações
+my-stats = Minhas Estatísticas
 options = Opções
 logout = Sair
 back = Voltar
@@ -87,6 +91,7 @@ no-scores-available = Nenhuma pontuação disponível.
 # Salvar/Restaurar
 saved-tables = Mesas Salvas
 no-saved-tables = Você não tem mesas salvas.
+no-players-online = Nenhum jogador está online no momento.
 restore-table = Restaurar
 delete-saved-table = Excluir
 saved-table-deleted = Mesa salva excluída.
