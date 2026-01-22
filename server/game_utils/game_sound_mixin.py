@@ -19,17 +19,6 @@ class GameSoundMixin:
         - self.get_user(player) -> User | None
     """
 
-    # Type hints for expected attributes (satisfied by Game class)
-    scheduled_sounds: list
-    sound_scheduler_tick: int
-    current_music: str
-    current_ambience: str
-    players: list["Player"]
-
-    def get_user(self, player: "Player") -> "User | None":
-        """Get user for player (implemented in Game)."""
-        raise NotImplementedError
-
     # ==========================================================================
     # Sound Scheduling
     # ==========================================================================

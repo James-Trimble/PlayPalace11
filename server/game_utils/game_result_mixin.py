@@ -27,30 +27,6 @@ class GameResultMixin:
         - self.destroy()
     """
 
-    # Type hints for expected attributes (satisfied by Game class)
-    game_active: bool
-    status: str
-    players: list["Player"]
-    sound_scheduler_tick: int
-    _table: Any
-
-    def get_user(self, player: "Player") -> "User | None":
-        """Get user for player (implemented in Game)."""
-        raise NotImplementedError
-
-    @classmethod
-    def get_type(cls) -> str:
-        """Return the type identifier for this game (implemented in Game)."""
-        raise NotImplementedError
-
-    def get_active_players(self) -> list["Player"]:
-        """Get active players (implemented in Game)."""
-        raise NotImplementedError
-
-    def destroy(self) -> None:
-        """Destroy the game (implemented in Game)."""
-        raise NotImplementedError
-
     def finish_game(self, show_end_screen: bool = True) -> None:
         """Mark the game as finished, persist result, and optionally show end screen.
 

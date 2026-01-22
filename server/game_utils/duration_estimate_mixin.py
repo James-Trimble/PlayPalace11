@@ -34,37 +34,6 @@ class DurationEstimateMixin:
     HUMAN_SPEED_MULTIPLIER = 2  # How much slower humans are than bots (override per game)
     TICKS_PER_SECOND = 20  # 50ms per tick (may be overridden by GameSoundMixin)
 
-    # Type hints for expected attributes (satisfied by Game class)
-    _estimate_threads: list[threading.Thread]
-    _estimate_results: list[int]
-    _estimate_errors: list[str]
-    _estimate_running: bool
-    _estimate_lock: threading.Lock
-    players: list["Player"]
-    options: Any  # Game options
-
-    def get_user(self, player: "Player") -> "User | None":
-        """Get user for player (implemented in Game)."""
-        raise NotImplementedError
-
-    @classmethod
-    def get_type(cls) -> str:
-        """Return the type identifier for this game (implemented in Game)."""
-        raise NotImplementedError
-
-    @classmethod
-    def get_min_players(cls) -> int:
-        """Return minimum number of players (implemented in Game)."""
-        raise NotImplementedError
-
-    def broadcast(self, text: str, buffer: str = "misc", exclude: "Player | None" = None) -> None:
-        """Send message to all players (implemented in Game or GameCommunicationMixin)."""
-        raise NotImplementedError
-
-    def broadcast_l(self, message_id: str, buffer: str = "misc", exclude: "Player | None" = None, **kwargs) -> None:
-        """Send localized message to all players (implemented in Game or GameCommunicationMixin)."""
-        raise NotImplementedError
-
     def _action_estimate_duration(self, player: "Player", action_id: str) -> None:
         """Start duration estimation by spawning CLI simulation threads."""
         if self._estimate_running:

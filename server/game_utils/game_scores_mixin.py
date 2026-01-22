@@ -19,19 +19,6 @@ class GameScoresMixin:
         - self.status_box(player, lines)
     """
 
-    # Type hints for expected attributes (satisfied by Game class)
-    current_player: "Player | None"
-    team_manager: "TeamManager"
-    players: list["Player"]
-
-    def get_user(self, player: "Player") -> "User | None":
-        """Get user for player (implemented in Game)."""
-        raise NotImplementedError
-
-    def status_box(self, player: "Player", lines: list[str]) -> None:
-        """Show status box to player (implemented in Game)."""
-        raise NotImplementedError
-
     def _action_whose_turn(self, player: "Player", action_id: str) -> None:
         """Announce whose turn it is."""
         user = self.get_user(player)

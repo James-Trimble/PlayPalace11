@@ -17,13 +17,6 @@ class GameCommunicationMixin:
         - self.get_user(player) -> User | None
     """
 
-    # Type hints for expected attributes (satisfied by Game class)
-    players: list["Player"]
-
-    def get_user(self, player: "Player") -> "User | None":
-        """Get user for player (implemented in Game)."""
-        raise NotImplementedError
-
     def broadcast(
         self, text: str, buffer: str = "misc", exclude: "Player | None" = None
     ) -> None:

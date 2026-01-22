@@ -22,20 +22,6 @@ class MenuManagementMixin:
         - self.get_all_visible_actions(player) -> list[ResolvedAction]
     """
 
-    # Type hints for expected attributes (satisfied by Game class)
-    _destroyed: bool
-    status: str
-    players: list["Player"]
-    _status_box_open: set[str]
-
-    def get_user(self, player: "Player") -> "User | None":
-        """Get user for player (implemented in Game)."""
-        raise NotImplementedError
-
-    def get_all_visible_actions(self, player: "Player") -> list["ResolvedAction"]:
-        """Get all visible actions for player (implemented in Game)."""
-        raise NotImplementedError
-
     def rebuild_player_menu(self, player: "Player") -> None:
         """Rebuild the turn menu for a player."""
         if self._destroyed:
