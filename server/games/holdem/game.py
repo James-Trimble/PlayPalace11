@@ -779,8 +779,8 @@ class HoldemGame(Game):
         if total > p.chips:
             total = p.chips
         if total < to_call + min_raise:
-            # Treat short stack as an all-in call
-            self._action_call(p, "call")
+            # Treat short stack as all-in (does not reopen betting)
+            self._action_all_in(p, "all_in")
             return
         p.chips -= total
         if p.chips == 0:

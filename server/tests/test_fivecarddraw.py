@@ -118,3 +118,26 @@ def test_draw_short_all_in_does_not_reopen_betting():
     if game.betting:
         assert game.betting.current_bet == 10
         assert game.betting.acted_since_raise == {player.id}
+
+
+def test_draw_underfunded_raise_goes_all_in():
+    game = FiveCardDrawGame()
+    user1 = MockUser("Alice")
+    user2 = MockUser("Bob")
+    game.add_player("Alice", user1)
+    game.add_player("Bob", user2)
+    game.on_start()
+    player = game.current_player
+    assert player is not None
+    player.chips = 100
+    if game.betting:
+        game.betting.current_bet = 90
+        game.betting.last_raise_size = 20
+        game.betting.bets[player.id] = 0
+        game.betting.acted_since_raise = set()
+    pot_before = game.pot_manager.total_pot()
+    game._action_raise(player, "20", "raise")
+    assert game.pot_manager.total_pot() == pot_before + 100
+    assert player.all_in is True
+    if game.betting:
+        assert game.betting.current_bet == 90
