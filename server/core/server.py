@@ -663,6 +663,7 @@ class Server:
             multiletter=False,
             escape_behavior=EscapeBehavior.SELECT_LAST,
         )
+        user.play_music("playermus.ogg")
         self._user_states[user.username] = {"menu": "whos_online_menu"}
 
     async def _handle_menu(self, client: ClientConnection, packet: dict) -> None:
