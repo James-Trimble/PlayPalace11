@@ -537,6 +537,7 @@ class Server:
             multiletter=True,
             escape_behavior=EscapeBehavior.SELECT_LAST,
         )
+        user.play_music("findgamemus.ogg")
         self._user_states[user.username] = {
             "menu": "tables_menu",
             "game_type": game_type,
@@ -604,6 +605,7 @@ class Server:
             multiletter=True,
             escape_behavior=EscapeBehavior.SELECT_LAST,
         )
+        user.play_music("settingsmus.ogg")
         self._user_states[user.username] = {"menu": "options_menu"}
 
     def _show_language_menu(self, user: NetworkUser) -> None:
@@ -2145,8 +2147,10 @@ class Server:
         language = packet.get("language", "English")
 
         if convo == "table":
+            # Local table chat enabled for all table members (lobby and in-game)
             table = self._tables.find_user_table(username)
             if table:
+                # Broadcast to all table members
                 for member_name in [m.username for m in table.members]:
                     user = self._users.get(member_name)
                     if user:
