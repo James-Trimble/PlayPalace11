@@ -4,6 +4,7 @@
 category-card-games = Karcianki
 category-dice-games = gry z kośćmi
 category-rb-play-center = RB Play Center
+category-poker = Poker
 category-uncategorized = niezkategoryzowane
 
 # Menu titles

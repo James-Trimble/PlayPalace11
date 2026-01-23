@@ -70,15 +70,45 @@ suit-spades = spades
 
 # Rank names
 rank-ace = ace
+rank-ace-plural = aces
 rank-two = 2
+rank-two-plural = 2s
 rank-three = 3
+rank-three-plural = 3s
 rank-four = 4
+rank-four-plural = 4s
 rank-five = 5
+rank-five-plural = 5s
 rank-six = 6
+rank-six-plural = 6s
 rank-seven = 7
+rank-seven-plural = 7s
 rank-eight = 8
+rank-eight-plural = 8s
 rank-nine = 9
+rank-nine-plural = 9s
 rank-ten = 10
+rank-ten-plural = 10s
 rank-jack = jack
+rank-jack-plural = jacks
 rank-queen = queen
+rank-queen-plural = queens
 rank-king = king
+rank-king-plural = kings
+
+# Poker hand descriptions
+poker-high-card-with = { $high } high, with { $rest }
+poker-high-card = { $high } high
+poker-pair-with = Pair of { $pair }, with { $rest }
+poker-pair = Pair of { $pair }
+poker-two-pair-with = Two Pair, { $high } and { $low }, with { $kicker }
+poker-two-pair = Two Pair, { $high } and { $low }
+poker-trips-with = Three of a Kind, { $trips }, with { $rest }
+poker-trips = Three of a Kind, { $trips }
+poker-straight-high = { $high } high Straight
+poker-flush-high-with = { $high } high Flush, with { $rest }
+poker-full-house = Full House, { $trips } over { $pair }
+poker-quads-with = Four of a Kind, { $quads }, with { $kicker }
+poker-quads = Four of a Kind, { $quads }
+poker-straight-flush-high = { $high } high Straight Flush
+poker-unknown-hand = Unknown hand
