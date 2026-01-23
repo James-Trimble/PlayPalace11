@@ -31,7 +31,9 @@
 |-------|---------------|--------------|-----------|
 | Phase 1 | 2,277 | 1,687 | 590 (26%) |
 | Phase 2 | 1,687 | 1,136 | 551 (33%) |
-| **Total** | **2,277** | **1,136** | **1,141 (50%)** |
+| Phase 3 | 1,136 | 493 | 643 (57%) |
+| Phase 3.1 | 493 | 316 | 177 (36%) |
+| **Total** | **2,277** | **316** | **1,961 (86%)** |
 
 ---
 
@@ -293,16 +295,203 @@ class Game(
 
 ---
 
-## Future Phases (Not Yet Implemented)
+## Phase 3: Further Mixin Extraction
 
-Remaining sections in `base.py` that could potentially be extracted:
+### Goal
+Reduce `games/base.py` from 1,136 lines by extracting event handling, action execution, action set creation, and options handling.
 
-| Section | Approx. Lines | Notes |
-|---------|---------------|-------|
-| Event Handling (`handle_event`) | ~140 lines | Complex, handles menu/keybind events |
-| Action Set Creation | ~200 lines | Creates lobby/estimate/standard action sets |
-| Action System (execute, resolve, find) | ~150 lines | Core action execution logic |
-| Options System | ~75 lines | Declarative options handling |
-| Player Management | ~50 lines | get_user, attach_user, etc. |
+### Mixins Created
 
-Current base.py is at **1,136 lines** with core game functionality intact.
+| Mixin | Lines Extracted | Approx. Size |
+|-------|-----------------|--------------|
+| `EventHandlingMixin` | handle_event, menu/keybind events | ~175 lines |
+| `ActionSetCreationMixin` | create_*_action_set, setup_keybinds | ~220 lines |
+| `ActionExecutionMixin` | execute_action, input handling | ~180 lines |
+| `OptionsHandlerMixin` | options methods (consolidated into options.py) | ~70 lines |
+| **Total** | | **~645 lines** |
+
+### Mixin Specifications
+
+#### 1. EventHandlingMixin (`game_utils/event_handling_mixin.py`)
+**Methods:**
+- `handle_event()` - Main event dispatcher
+- `_handle_menu_event()` - Handle menu selections
+- `_handle_editbox_event()` - Handle editbox submissions
+- `_handle_keybind_event()` - Handle keybind presses
+- `_handle_actions_menu_selection()` - Handle F5 menu selection
+
+**Expects on Game class:**
+- `self._actions_menu_open: set[str]`
+- `self._pending_actions: dict[str, str]`
+- `self._status_box_open: set[str]`
+- `self._keybinds: dict[str, list[Keybind]]`
+- `self.get_user(player) -> User | None`
+- `self.find_action()`, `self.resolve_action()`, `self.execute_action()`
+- `self.get_all_visible_actions()`, `self.rebuild_player_menu()`, `self.rebuild_all_menus()`
+
+#### 2. ActionSetCreationMixin (`game_utils/action_set_creation_mixin.py`)
+**Methods:**
+- `create_lobby_action_set()` - Create lobby actions (start, add bot, etc.)
+- `create_estimate_action_set()` - Create duration estimate action
+- `create_standard_action_set()` - Create standard actions (F5, save, scores)
+- `setup_keybinds()` - Define all keybinds
+- `create_turn_action_set()` - Override for game-specific turn actions
+- `setup_player_actions()` - Set up all action sets for a player
+
+**Expects on Game class:**
+- `self.players: list[Player]`
+- `self.player_action_sets: dict`
+- `self._keybinds: dict`
+- `self.get_user()`, `self.add_action_set()`, `self.define_keybind()`
+
+#### 3. ActionExecutionMixin (`game_utils/action_execution_mixin.py`)
+**Methods:**
+- `execute_action()` - Execute an action for a player
+- `get_action_context()` - Get current action context
+- `_get_menu_options_for_action()` - Get menu options for action
+- `_get_bot_input()` - Get automatic input for bots
+- `_request_action_input()` - Request input from human players
+- `end_turn()` - End current player's turn
+
+**Expects on Game class:**
+- `self._pending_actions: dict[str, str]`
+- `self._action_context: dict[str, ActionContext]`
+- `self.get_user()`, `self.find_action()`, `self.resolve_action()`, `self.advance_turn()`
+
+#### 4. OptionsHandlerMixin (`game_utils/options.py` - consolidated)
+**Methods:**
+- `create_options_action_set()` - Create options action set
+- `_handle_option_change()` - Handle option value changes
+- `_handle_option_toggle()` - Handle boolean option toggles
+- `_action_set_option()` - Generic set option handler
+- `_action_toggle_option()` - Generic toggle option handler
+
+**Expects on Game class:**
+- `self.options: GameOptions`
+- `self.get_user()`, `self.rebuild_all_menus()`
+
+---
+
+## Final Inheritance Structure (Phase 3)
+
+```python
+@dataclass
+class Game(
+    ABC,
+    DataClassJSONMixin,
+    GameSoundMixin,
+    GameCommunicationMixin,
+    GameResultMixin,
+    DurationEstimateMixin,
+    GameScoresMixin,
+    GamePredictionMixin,
+    TurnManagementMixin,
+    MenuManagementMixin,
+    ActionVisibilityMixin,
+    LobbyActionsMixin,
+    EventHandlingMixin,
+    ActionSetCreationMixin,
+    ActionExecutionMixin,
+    OptionsHandlerMixin,
+):
+    """Abstract base class for all games."""
+    ...
+```
+
+---
+
+## Remaining in base.py (493 lines)
+
+Core infrastructure that should stay in base.py:
+- `ActionContext` dataclass
+- `Player` dataclass
+- `Game` class with:
+  - Dataclass fields and `__post_init__`
+  - Abstract methods (`get_name`, `get_type`, `on_start`)
+  - Player management (`get_user`, `attach_user`, `get_player_by_*`)
+  - Action set system core (`get_action_sets`, `find_action`, `resolve_action`)
+  - Keybind definition (`define_keybind`, `_get_keybind_for_action`)
+  - Player helpers (`get_active_players`, `get_human_count`, `create_player`)
+  - `current_player` property and `team_manager` property
+  - `destroy()`, `initialize_lobby()`
+
+---
+
+## Phase 3.1: Consolidation into Existing Mixins
+
+### Goal
+Further reduce `games/base.py` from 493 lines by moving methods into existing mixins and creating one new mixin for the action set system.
+
+### Changes Made
+
+| Move | Lines Moved | Target |
+|------|-------------|--------|
+| `define_keybind()`, `_get_keybind_for_action()` | ~43 | ActionSetCreationMixin |
+| `_is_player_spectator()`, `get_active_players()`, `get_active_player_count()` | ~11 | ActionVisibilityMixin |
+| `get_human_count()`, `get_bot_count()`, `create_player()`, `add_player()`, `destroy()`, `initialize_lobby()` | ~38 | LobbyActionsMixin |
+| `current_player` property (getter/setter) | ~15 | TurnManagementMixin |
+| Action set methods (new mixin) | ~60 | ActionSetSystemMixin |
+| **Total** | **~167 lines** | |
+
+### New Mixin Created
+
+#### ActionSetSystemMixin (`game_utils/action_set_system_mixin.py`)
+**Methods:**
+- `get_action_sets()` - Get ordered list of action sets for a player
+- `get_action_set()` - Get a specific action set by name
+- `add_action_set()` - Add an action set to a player
+- `remove_action_set()` - Remove an action set by name
+- `find_action()` - Find an action by ID across all action sets
+- `resolve_action()` - Resolve a single action's state
+- `get_all_visible_actions()` - Get all visible actions
+- `get_all_enabled_actions()` - Get all enabled actions
+
+**Expects on Game class:**
+- `self.player_action_sets: dict[str, list[ActionSet]]`
+
+---
+
+## Final Inheritance Structure (Phase 3.1)
+
+```python
+@dataclass
+class Game(
+    ABC,
+    DataClassJSONMixin,
+    GameSoundMixin,
+    GameCommunicationMixin,
+    GameResultMixin,
+    DurationEstimateMixin,
+    GameScoresMixin,
+    GamePredictionMixin,
+    TurnManagementMixin,
+    MenuManagementMixin,
+    ActionVisibilityMixin,
+    LobbyActionsMixin,
+    EventHandlingMixin,
+    ActionSetCreationMixin,
+    ActionExecutionMixin,
+    OptionsHandlerMixin,
+    ActionSetSystemMixin,
+):
+    """Abstract base class for all games."""
+    ...
+```
+
+---
+
+## Remaining in base.py (316 lines)
+
+Core infrastructure that must stay in base.py:
+- `ActionContext` dataclass (~10 lines)
+- `Player` dataclass (~18 lines)
+- `Game` class with:
+  - Dataclass fields and `__post_init__` (~50 lines)
+  - `rebuild_runtime_state()` hook (~12 lines)
+  - Abstract/class methods: `get_name`, `get_type`, `get_name_key`, `get_category`, `get_min_players`, `get_max_players`, `get_leaderboard_types` (~56 lines)
+  - `prestart_validate()`, `_validate_team_mode()` (~34 lines)
+  - `on_start` (abstract), `on_tick`, `on_round_timer_ready` (~16 lines)
+  - Player lookup: `attach_user`, `get_user`, `get_player_by_id`, `get_player_by_name` (~28 lines)
+  - `team_manager` property (~4 lines)
+
+Current base.py is at **316 lines** - an 86% reduction from the original 2,277 lines.

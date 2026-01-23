@@ -22,7 +22,7 @@ BOT_NAMES = [
 
 
 class LobbyActionsMixin:
-    """Mixin providing lobby action handlers (start, add/remove bot, leave, etc).
+    """Mixin providing lobby action handlers and player/lifecycle management.
 
     Expects on the Game class:
         - self.status: str
@@ -30,16 +30,16 @@ class LobbyActionsMixin:
         - self.players: list[Player]
         - self._table: Any
         - self._users: dict
+        - self._destroyed: bool
         - self._actions_menu_open: set[str]
         - self.player_action_sets: dict
         - self.get_user(player) -> User | None
         - self.broadcast_l(), self.broadcast_sound()
         - self.prestart_validate(), self.on_start()
-        - self.create_player(), self.setup_player_actions()
         - self.attach_user(), self.rebuild_all_menus()
-        - self.destroy()
         - self.get_all_enabled_actions()
         - self._get_keybind_for_action()
+        - self.setup_keybinds(), self.setup_player_actions()
     """
 
     # Type hints for expected attributes (satisfied by Game class)
@@ -269,3 +269,48 @@ class LobbyActionsMixin:
         """Save the current table state (host only). This destroys the table."""
         if self._table:
             self._table.save_and_close(player.name)
+
+    # Game lifecycle
+
+    def destroy(self) -> None:
+        """Request destruction of this game/table."""
+        self._destroyed = True
+        if self._table:
+            self._table.destroy()
+
+    def initialize_lobby(self, host_name: str, host_user: "User") -> None:
+        """Initialize the game in lobby mode with a host."""
+        self.host = host_name
+        self.status = "waiting"
+        self.setup_keybinds()
+        self.add_player(host_name, host_user)
+        self.rebuild_all_menus()
+
+    # Player management
+
+    def get_human_count(self) -> int:
+        """Get the number of human players."""
+        return sum(1 for p in self.players if not p.is_bot)
+
+    def get_bot_count(self) -> int:
+        """Get the number of bot players."""
+        return sum(1 for p in self.players if p.is_bot)
+
+    def create_player(
+        self, player_id: str, name: str, is_bot: bool = False
+    ) -> "Player":
+        """Create a new player. Override in subclasses for custom player types."""
+        # Import here to avoid circular dependency at module level
+        from ..games.base import Player
+
+        return Player(id=player_id, name=name, is_bot=is_bot)
+
+    def add_player(self, name: str, user: "User") -> "Player":
+        """Add a player to the game."""
+        is_bot = hasattr(user, "is_bot") and user.is_bot
+        player = self.create_player(user.uuid, name, is_bot=is_bot)
+        self.players.append(player)
+        self.attach_user(player.id, user)
+        # Set up action sets for the new player
+        self.setup_player_actions(player)
+        return player

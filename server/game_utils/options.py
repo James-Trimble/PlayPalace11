@@ -386,3 +386,87 @@ class GameOptions(DataClassJSONMixin):
                 # Fallback: create and add new action set if it doesn't exist
                 new_options_set = self.create_options_action_set(game, player)
                 game.add_action_set(player, new_options_set)
+
+
+class OptionsHandlerMixin:
+    """Mixin providing declarative options handling for games.
+
+    Expects on the Game class:
+        - self.options: GameOptions (subclass with option_field declarations)
+        - self.get_user(player) -> User | None
+        - self.rebuild_all_menus()
+    """
+
+    def create_options_action_set(self, player: "Player") -> ActionSet:
+        """Create the options action set for a player.
+
+        If the game's options class uses declarative options (option_field),
+        this will auto-generate the action set. Otherwise, subclasses should
+        override this method.
+        """
+        if hasattr(self.options, "create_options_action_set"):
+            return self.options.create_options_action_set(self, player)
+        # Fallback for non-declarative options
+        return ActionSet(name="options")
+
+    def _handle_option_change(self, option_name: str, value: str) -> None:
+        """Handle a declarative option change (for int/menu options).
+
+        This is called by auto-generated option actions.
+        No broadcast needed - screen readers speak the updated list item.
+        """
+        meta = get_option_meta(type(self.options), option_name)
+        if not meta:
+            return
+
+        success, converted = meta.validate_and_convert(value)
+        if not success:
+            return
+
+        # Set the option value
+        setattr(self.options, option_name, converted)
+
+        # Update labels and rebuild menus
+        if hasattr(self.options, "update_options_labels"):
+            self.options.update_options_labels(self)
+        self.rebuild_all_menus()
+
+    def _handle_option_toggle(self, option_name: str) -> None:
+        """Handle a declarative boolean option toggle.
+
+        This is called by auto-generated toggle actions.
+        No broadcast needed - screen readers speak the updated list item.
+        """
+        meta = get_option_meta(type(self.options), option_name)
+        if not meta:
+            return
+
+        # Toggle the value
+        current = getattr(self.options, option_name)
+        new_value = not current
+        setattr(self.options, option_name, new_value)
+
+        # Update labels and rebuild menus
+        if hasattr(self.options, "update_options_labels"):
+            self.options.update_options_labels(self)
+        self.rebuild_all_menus()
+
+    # Generic option action handlers (extract option_name from action_id)
+
+    def _action_set_option(self, player: "Player", value: str, action_id: str) -> None:
+        """Generic handler for setting an option value.
+
+        Extracts the option name from action_id (e.g., "set_total_rounds" -> "total_rounds")
+        and delegates to _handle_option_change.
+        """
+        option_name = action_id.removeprefix("set_")
+        self._handle_option_change(option_name, value)
+
+    def _action_toggle_option(self, player: "Player", action_id: str) -> None:
+        """Generic handler for toggling a boolean option.
+
+        Extracts the option name from action_id (e.g., "toggle_show_hints" -> "show_hints")
+        and delegates to _handle_option_toggle.
+        """
+        option_name = action_id.removeprefix("toggle_")
+        self._handle_option_toggle(option_name)
