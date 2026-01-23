@@ -80,6 +80,7 @@ class MainWindow(wx.Frame):
         self.current_menu_id = None  # Track which menu is currently displayed
         self.current_menu_state = None  # Track previous menu state for comparison
         self.current_menu_item_ids = []  # Track item IDs for current menu (parallel to menu items)
+        self.current_menu_metadata = {}  # Track metadata about current menu (e.g., game_type for tables_menu)
         self.current_edit_multiline = False  # Track if current editbox is multiline
         self.current_edit_read_only = False  # Track if current editbox is read-only
 
@@ -714,14 +715,26 @@ class MainWindow(wx.Frame):
             return ""
 
     def send_table_chat(self, message: str):
-        """Send table chat message to server."""
+        """Send table chat message to server.
+        
+        Determines whether to send as "table" chat (if in a table) or "game_lobby" chat
+        (if browsing tables/games for a specific game type).
+        """
         if not message:
             return
         lang = self.get_language_name()
         if not lang:
             return
+        
+        # Determine chat type based on current menu and metadata
+        convo_type = "table"  # Default to table chat
+        
+        # If we're in tables_menu with a game_type metadata, send as game_lobby chat
+        if self.current_menu_id == "tables_menu" and "game_type" in self.current_menu_metadata:
+            convo_type = "game_lobby"
+        
         self.network.send_packet(
-            {"type": "chat", "convo": "table", "message": message, "language": lang}
+            {"type": "chat", "convo": convo_type, "message": message, "language": lang}
         )
 
     def send_global_chat(self, prefix: str, message: str):
@@ -1335,8 +1348,9 @@ class MainWindow(wx.Frame):
             not same_user
             and lang != self.client_options["social"]["chat_input_language"]
         ):
+            # Check language filters for global, table, and game_lobby chat
             if convo == "global" or (
-                convo == "table"
+                convo in ["table", "game_lobby"]
                 and self.client_options["social"][
                     "include_language_filters_for_table_chat"
                 ]
@@ -1359,11 +1373,11 @@ class MainWindow(wx.Frame):
         # Convo doesn't support muting, or the mute flag is disabled
         if (
             same_user
-            or convo not in {"global", "table"}
-            or not self.client_options["social"][f"mute_{convo}_chat"]
+            or convo not in {"global", "table", "game_lobby"}
+            or not self.client_options["social"][f"mute_{convo}_chat" if convo != "game_lobby" else "mute_table_chat"]
         ):
             sound = "chat"
-            if convo == "table":
+            if convo in ["table", "game_lobby"]:
                 sound += "local"
             self.sound_manager.play(sound + ".ogg")
             self.speaker.speak(message)
@@ -1643,6 +1657,7 @@ class MainWindow(wx.Frame):
         selection_id = packet.get("selection_id", None)  # Optional item ID to focus
         grid_enabled = packet.get("grid_enabled", False)
         grid_width = packet.get("grid_width", 1)
+        metadata = packet.get("metadata", {})  # Optional metadata about the menu state
 
         # Parse items - can be strings or objects with {text, id}
         items = []
@@ -1660,6 +1675,9 @@ class MainWindow(wx.Frame):
 
         # Store item IDs for later use
         self.current_menu_item_ids = item_ids
+        
+        # Store menu metadata (e.g., game_type for tables_menu)
+        self.current_menu_metadata = metadata
 
         # Convert selection_id to position if provided
         if selection_id is not None and position is None:

@@ -536,6 +536,7 @@ class Server:
             items,
             multiletter=True,
             escape_behavior=EscapeBehavior.SELECT_LAST,
+            metadata={"game_type": game_type},
         )
         user.play_music("findgamemus.ogg")
         self._user_states[user.username] = {
@@ -2163,6 +2164,31 @@ class Server:
                                 "language": language,
                             }
                         )
+        elif convo == "game_lobby":
+            # Game lobby chat: users browsing the same game_type can chat
+            sender_state = self._user_states.get(username, {})
+            sender_game_type = sender_state.get("game_type")
+            
+            if sender_game_type:
+                # Send message to all users browsing the same game_type
+                for other_username, other_state in self._user_states.items():
+                    # Send to users in tables_menu or games_menu for same game_type
+                    other_menu = other_state.get("menu")
+                    other_game_type = other_state.get("game_type")
+                    
+                    if (other_game_type == sender_game_type and 
+                        other_menu in ["tables_menu", "games_menu"]):
+                        user = self._users.get(other_username)
+                        if user:
+                            await user.connection.send(
+                                {
+                                    "type": "chat",
+                                    "convo": "game_lobby",
+                                    "sender": username,
+                                    "message": message,
+                                    "language": language,
+                                }
+                            )
         elif convo == "global":
             # Broadcast to all users
             if self._ws_server:

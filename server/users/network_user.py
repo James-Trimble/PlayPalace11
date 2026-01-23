@@ -140,6 +140,7 @@ class NetworkUser(User):
         position: int | None = None,
         grid_enabled: bool = False,
         grid_width: int = 1,
+        metadata: dict | None = None,
     ) -> None:
         converted_items = self._convert_items(items)
         escape_str = escape_behavior.value
@@ -166,6 +167,8 @@ class NetworkUser(User):
         if position is not None:
             # Convert 1-based to 0-based for client
             packet["position"] = position - 1
+        if metadata:
+            packet["metadata"] = metadata
         self._queue_packet(packet)
 
     def update_menu(
