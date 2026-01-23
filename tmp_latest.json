@@ -1,0 +1,7 @@
+{
+  "version": "11.2.3",
+  "sha256": "6B1BB379E76D275B3B2529E552E8F85F027BFA9AAB2297AF97BA5C320198B3D0",
+  "url": "https://playpalace.dev/releases/PlayPalace-11.2.3.zip",
+  "whats_new": "Added server-side MOTD system with dismissal tracking.",
+  "notes": "Server and client updates. MOTD dialog displays on connect with optional 'don't show again' per server."
+}

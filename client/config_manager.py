@@ -682,6 +682,39 @@ class ConfigManager:
         success = delete_item_from_dict(overrides, key_path, delete_empty_layers= delete_empty_layers)
         if success: self.save_profiles()
 
+    def get_dismissed_motds(self, server_id: str) -> list[str]:
+        """
+        Get list of dismissed MOTD IDs for a server.
+
+        Args:
+            server_id: Server ID
+
+        Returns:
+            List of dismissed MOTD IDs
+        """
+        if "dismissed_motds" not in self.profiles:
+            self.profiles["dismissed_motds"] = {}
+
+        return self.profiles["dismissed_motds"].get(server_id, [])
+
+    def add_dismissed_motd(self, server_id: str, motd_id: str):
+        """
+        Mark an MOTD as dismissed for a server.
+
+        Args:
+            server_id: Server ID
+            motd_id: MOTD message ID
+        """
+        if "dismissed_motds" not in self.profiles:
+            self.profiles["dismissed_motds"] = {}
+
+        if server_id not in self.profiles["dismissed_motds"]:
+            self.profiles["dismissed_motds"][server_id] = []
+
+        if motd_id not in self.profiles["dismissed_motds"][server_id]:
+            self.profiles["dismissed_motds"][server_id].append(motd_id)
+            self.save_profiles()
+
     def _deep_copy(self, obj: Any) -> Any:
         """Deep copy a nested dict/list structure."""
         if isinstance(obj, dict):

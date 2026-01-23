@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "id": "welcome_2026_01",
+      "title": "Welcome to PlayPalace!",
+      "message": "Welcome to PlayPalace! This server and project are in rapid development.\n\nIf you encounter any bugs, have suggestions, or want to provide feedback, please visit our website at playpalace.dev and reach out via email.\n\nWe appreciate your patience and feedback as we continue improving the platform!",
+      "dismissable": true,
+      "active": true
+    }
+  ]
+}

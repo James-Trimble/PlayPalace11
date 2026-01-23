@@ -2,6 +2,7 @@
 
 import wx
 from .menu_list import MenuList
+from .motd_dialog import MOTDDialog
 import accessible_output2.outputs.auto as auto_output
 import sys
 import os
@@ -1130,6 +1131,28 @@ class MainWindow(wx.Frame):
         self.sound_manager.play("welcome.ogg", volume=1.0)
 
         self.add_history(f"Connected to server version {version}")
+
+    def on_server_motd(self, packet):
+        """Handle MOTD (Message of the Day) packet from server."""
+        motd_id = packet.get("id", "")
+        title = packet.get("title", "Message of the Day")
+        message = packet.get("message", "")
+        dismissable = packet.get("dismissable", True)
+
+        # Check if this MOTD has been dismissed
+        if self.config_manager and self.server_id and motd_id:
+            dismissed_motds = self.config_manager.get_dismissed_motds(self.server_id)
+            if motd_id in dismissed_motds:
+                # User has dismissed this MOTD, don't show it
+                return
+
+        # Show the MOTD dialog
+        dialog = MOTDDialog(self, motd_id, title, message, dismissable)
+        if dialog.ShowModal() == wx.ID_OK:
+            if dialog.get_dont_show_again() and self.config_manager and self.server_id and motd_id:
+                # Save dismissed MOTD
+                self.config_manager.add_dismissed_motd(self.server_id, motd_id)
+        dialog.Destroy()
 
     def on_open_server_options(self, packet):
         """Handle open server options packet from server.

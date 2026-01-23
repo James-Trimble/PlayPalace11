@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PlayPalace</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+    :root {
+      --bg: #0b1324;
+      --panel: #111b32;
+      --panel-2: #0f1728;
+      --accent: #5ef0ff;
+      --accent-2: #a7ff4f;
+      --text: #f5f7ff;
+      --muted: #9fb3d9;
+      --border: #1f2b43;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(94,240,255,0.14), transparent 40%),
+                  radial-gradient(circle at 80% 0%, rgba(167,255,79,0.12), transparent 35%),
+                  var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header/Footer Navigation */
+    nav {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    nav .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    nav .logo {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+      letter-spacing: -0.5px;
+    }
+
+    nav .nav-links {
+      display: flex;
+      gap: 20px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    nav a.nav-link {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    nav a.nav-link:hover, nav a.nav-link.active {
+      color: var(--accent);
+    }
+
+    .main-content {
+      flex: 1;
+    }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+
+    header.hero {
+      display: grid;
+      gap: 18px;
+      background: linear-gradient(135deg, var(--panel), var(--panel-2));
+      padding: 28px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .title {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 2.1rem;
+      letter-spacing: -0.5px;
+    }
+
+    .tagline { margin: 0; color: var(--muted); font-size: 1rem; }
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    .pill .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+    .pill.online .dot { background: var(--accent-2); box-shadow: 0 0 0 6px rgba(167,255,79,0.18); }
+    .pill.offline .dot { background: #ff6b6b; box-shadow: 0 0 0 6px rgba(255,107,107,0.18); }
+
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      background: linear-gradient(135deg, var(--accent), #7bf2ff);
+      color: #051022;
+      border-radius: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      letter-spacing: 0.2px;
+      box-shadow: 0 14px 40px rgba(94, 240, 255, 0.28);
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 18px 48px rgba(94, 240, 255, 0.35); }
+
+    .meta { color: var(--muted); font-size: 0.95rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+      margin-top: 22px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    h3 { margin: 0 0 10px; font-size: 1.1rem; letter-spacing: -0.2px; }
+    p { margin: 6px 0 10px; color: var(--muted); line-height: 1.55; }
+    ul { margin: 0; padding-left: 18px; color: var(--muted); }
+    li { margin-bottom: 6px; }
+    .list-inline { display: flex; flex-wrap: wrap; gap: 10px; padding: 0; list-style: none; }
+    .chip { background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px; color: var(--text); }
+    
+    .page-footer {
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+      padding: 24px;
+      text-align: center;
+      margin-top: 32px;
+    }
+
+    .page-footer .footer-container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .page-footer .footer-links {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      list-style: none;
+      margin: 0 0 16px;
+      padding: 0;
+      flex-wrap: wrap;
+    }
+
+    .page-footer a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .page-footer a:hover {
+      color: var(--accent);
+    }
+
+    .page-footer .copyright {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    @media (max-width: 640px) {
+      .title { font-size: 1.6rem; }
+      .cta { flex-direction: column; align-items: flex-start; }
+      nav .container { justify-content: center; }
+      nav .nav-links { justify-content: center; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">PlayPalace</a>
+      <ul class="nav-links">
+        <li><a href="/" class="nav-link active">Home</a></li>
+        <li><a href="/releases" class="nav-link">Downloads</a></li>
+        <li><a href="/feedback" class="nav-link">Feedback</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="page">
+      <header class="hero">
+      <div class="title">PlayPalace <span id="hero-version" class="pill" style="padding:6px 10px">v11.2.2</span></div>
+      <p class="tagline">Audio-first multiplayer tabletop lounge: quick matches, screen-reader friendly UI, and a lobby full of classic games.</p>
+      
+      <div class="cta">
+        <a id="download" class="btn" href="/releases">Download the latest build</a>
+        <div class="meta" id="release-meta">Version v11.2.2 · Go to releases page</div>
+      </div>
+
+      <div class="status-row">
+        <span id="status-pill" class="pill">
+          <span class="dot"></span>
+          <span id="status-text">Checking server...</span>
+        </span>
+        <span class="pill">Players online: <strong id="players">—</strong></span>
+        <span class="pill">Server version: <strong id="server-version">—</strong></span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h3>Get started</h3>
+        <p>1) Download the client. 2) Launch and create an account. 3) You'll connect automatically to <strong>wss://ws.playpalace.dev</strong> and land in the lobby.</p>
+        <p>Built for Windows with polished audio cues, full keyboard navigation, and seamless reconnects.</p>
+      </section>
+
+      <section class="card">
+        <h3>What's inside</h3>
+        <p>Fast-paced multiplayer takes on classics and community favorites.</p>
+        <ul class="list-inline">
+          <li class="chip">Chaos Bear</li>
+          <li class="chip">Farkle</li>
+          <li class="chip">Left Right Center</li>
+          <li class="chip">Light Turret</li>
+          <li class="chip">1-4-24</li>
+          <li class="chip">Mile by Mile</li>
+          <li class="chip">Ninety Nine</li>
+          <li class="chip">Pig</li>
+          <li class="chip">Pirates of the Lost Seas</li>
+          <li class="chip">Scopa</li>
+          <li class="chip">Threes</li>
+          <li class="chip">Toss Up</li>
+          <li class="chip">Tradeoff</li>
+          <li class="chip">UNO</li>
+          <li class="chip">Yahtzee</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h3>Live status</h3>
+        <p>We refresh every few seconds to show who's around.</p>
+        <p><strong id="live-players">—</strong> players online · Updated <span id="updated">—</span></p>
+      </section>
+    </div>
+  </div>
+  </div>
+
+  <footer class="page-footer">
+    <div class="footer-container">
+      <ul class="footer-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/releases">Downloads</a></li>
+        <li><a href="/feedback">Feedback</a></li>
+        <li><a href="https://github.com/James-Trimble/PlayPalace11" target="_blank" rel="noopener">GitHub (Fork)</a></li>
+        <li><a href="https://github.com/XGDevGroup/PlayPalace11" target="_blank" rel="noopener">GitHub (Original)</a></li>
+      </ul>
+      <p class="copyright">© <span id="footer-year"></span> PlayPalace. Open source, accessible gaming platform.</p>
+    </div>
+  </footer>
+
+<script>
+  // Update copyright year
+  document.getElementById('footer-year').textContent = new Date().getFullYear();
+
+  const statusText = document.getElementById('status-text');
+  const statusPill = document.getElementById('status-pill');
+  const playersEl = document.getElementById('players');
+  const livePlayersEl = document.getElementById('live-players');
+  const serverVersionEl = document.getElementById('server-version');
+  const updatedEl = document.getElementById('updated');
+  const downloadBtn = document.getElementById('download');
+  const releaseMeta = document.getElementById('release-meta');
+  const heroVersion = document.getElementById('hero-version');
+
+  function setStatus(online, version = '—', players = '—', updated = null) {
+    statusPill.classList.toggle('online', online);
+    statusPill.classList.toggle('offline', !online);
+    statusText.textContent = online ? 'Server online' : 'Server offline';
+    serverVersionEl.textContent = version || '—';
+    playersEl.textContent = players;
+    livePlayersEl.textContent = players;
+    updatedEl.textContent = updated ? new Date(updated * 1000).toLocaleTimeString() : '—';
+  }
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/status.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('status fetch failed');
+      const data = await res.json();
+      const playerCount = typeof data.players === 'object' ? (data.players.count ?? 0) : (data.players ?? 0);
+      setStatus(Boolean(data.online), data.version, playerCount, data.updated || data.timestamp);
+    } catch (err) {
+      setStatus(false);
+    }
+  }
+
+  async function fetchRelease() {
+    try {
+      const res = await fetch('/releases/latest.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('release fetch failed');
+      const data = await res.json();
+      const v = data.version ? `v${data.version}` : 'Latest';
+      downloadBtn.href = '/releases';
+      downloadBtn.textContent = 'Download the latest build';
+      releaseMeta.textContent = `${v} · See release details`;
+      heroVersion.textContent = v;
+    } catch (err) {
+      // Keep defaults if release info is unreachable
+    }
+  }
+
+  fetchStatus();
+  fetchRelease();
+  setInterval(fetchStatus, 8000);
+</script>
+</body>
+</html>
