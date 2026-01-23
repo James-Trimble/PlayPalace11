@@ -717,8 +717,8 @@ class MainWindow(wx.Frame):
     def send_table_chat(self, message: str):
         """Send table chat message to server.
         
-        Determines whether to send as "table" chat (if in a table) or "game_lobby" chat
-        (if browsing tables/games for a specific game type).
+        Sends as "table" chat (if in a table) or "game_lobby" chat (if not in a table).
+        The server determines who receives it based on table membership.
         """
         if not message:
             return
@@ -726,12 +726,10 @@ class MainWindow(wx.Frame):
         if not lang:
             return
         
-        # Determine chat type based on current menu and metadata
-        convo_type = "table"  # Default to table chat
-        
-        # If we're in tables_menu with a game_type metadata, send as game_lobby chat
-        if self.current_menu_id == "tables_menu" and "game_type" in self.current_menu_metadata:
-            convo_type = "game_lobby"
+        # Always send as game_lobby chat - server will route appropriately
+        # If user is in a table, they'll get table chat
+        # If not in a table, they'll get game_lobby chat with all other non-table users
+        convo_type = "game_lobby"
         
         self.network.send_packet(
             {"type": "chat", "convo": convo_type, "message": message, "language": lang}

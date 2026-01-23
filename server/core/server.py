@@ -2165,30 +2165,23 @@ class Server:
                             }
                         )
         elif convo == "game_lobby":
-            # Game lobby chat: users browsing the same game_type can chat
-            sender_state = self._user_states.get(username, {})
-            sender_game_type = sender_state.get("game_type")
-            
-            if sender_game_type:
-                # Send message to all users browsing the same game_type
-                for other_username, other_state in self._user_states.items():
-                    # Send to users in tables_menu or games_menu for same game_type
-                    other_menu = other_state.get("menu")
-                    other_game_type = other_state.get("game_type")
-                    
-                    if (other_game_type == sender_game_type and 
-                        other_menu in ["tables_menu", "games_menu"]):
-                        user = self._users.get(other_username)
-                        if user:
-                            await user.connection.send(
-                                {
-                                    "type": "chat",
-                                    "convo": "game_lobby",
-                                    "sender": username,
-                                    "message": message,
-                                    "language": language,
-                                }
-                            )
+            # Game lobby chat: all users NOT in a table can chat
+            # This is for anyone in menus/browsing, not in an actual game table
+            for other_username in self._users.keys():
+                # Check if user is NOT in a table
+                other_table = self._tables.find_user_table(other_username)
+                if not other_table:
+                    user = self._users.get(other_username)
+                    if user:
+                        await user.connection.send(
+                            {
+                                "type": "chat",
+                                "convo": "game_lobby",
+                                "sender": username,
+                                "message": message,
+                                "language": language,
+                            }
+                        )
         elif convo == "global":
             # Broadcast to all users
             if self._ws_server:
