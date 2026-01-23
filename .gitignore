@@ -9,3 +9,6 @@ server/playpalace.db
 client/build/
 client/dist/
 client/*.spec
+PlayPalace-*.zip
+client/dist/*.zip
+client/build/
