@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feedback | PlayPalace</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+    :root {
+      --bg: #0b1324;
+      --panel: #111b32;
+      --panel-2: #0f1728;
+      --accent: #5ef0ff;
+      --accent-2: #a7ff4f;
+      --text: #f5f7ff;
+      --muted: #9fb3d9;
+      --border: #1f2b43;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --error: #ff6b6b;
+      --success: #a7ff4f;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(94,240,255,0.14), transparent 40%),
+                  radial-gradient(circle at 80% 0%, rgba(167,255,79,0.12), transparent 35%),
+                  var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header/Footer Navigation */
+    nav {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    nav .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    nav .logo {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+      letter-spacing: -0.5px;
+    }
+
+    nav .nav-links {
+      display: flex;
+      gap: 20px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    nav a:hover, nav a.active {
+      color: var(--accent);
+    }
+
+    footer {
+      margin-top: auto;
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+      padding: 24px;
+      text-align: center;
+    }
+
+    footer .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    footer .footer-links {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      list-style: none;
+      margin: 0 0 16px;
+      padding: 0;
+      flex-wrap: wrap;
+    }
+
+    footer a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    footer a:hover {
+      color: var(--accent);
+    }
+
+    footer .copyright {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* Main Content */
+    main {
+      flex: 1;
+      max-width: 700px;
+      margin: 48px auto;
+      padding: 0 24px;
+      width: 100%;
+    }
+
+    .page-header {
+      margin-bottom: 32px;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      margin: 0 0 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .form-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 32px;
+      box-shadow: var(--shadow);
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    label .required {
+      color: var(--error);
+      margin-left: 4px;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(94,240,255,0.1);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    .helper-text {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .submit-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, var(--accent), #7bf2ff);
+      color: #051022;
+      border: none;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 0.2px;
+      box-shadow: 0 14px 40px rgba(94, 240, 255, 0.28);
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    .submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 48px rgba(94, 240, 255, 0.35);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .alert {
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-weight: 500;
+    }
+
+    .alert-success {
+      background: rgba(167,255,79,0.12);
+      border: 1px solid rgba(167,255,79,0.3);
+      color: var(--success);
+    }
+
+    .alert-error {
+      background: rgba(255,107,107,0.12);
+      border: 1px solid rgba(255,107,107,0.3);
+      color: var(--error);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .show-when-other {
+      display: none;
+    }
+
+    .show-when-other.visible {
+      display: block;
+    }
+
+    @media (max-width: 640px) {
+      h1 { font-size: 1.8rem; }
+      .form-card { padding: 24px; }
+      nav .container { justify-content: center; }
+      nav .nav-links { justify-content: center; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">PlayPalace</a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/releases">Downloads</a></li>
+        <li><a href="/feedback" class="active">Feedback</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>Feedback & Support</h1>
+      <p class="subtitle">
+        Help us improve PlayPalace! Report bugs, suggest features, or share your experience. 
+        We read every submission and appreciate your input.
+      </p>
+    </div>
+
+    <div id="success-message" class="alert alert-success hidden">
+      <strong>Thank you!</strong> Your feedback has been submitted successfully. We'll review it soon.
+    </div>
+
+    <div id="error-message" class="alert alert-error hidden">
+      <strong>Oops!</strong> Something went wrong. Please try again later.
+    </div>
+
+    <div class="form-card">
+      <form id="feedback-form" action="https://formspree.io/f/mkojojpe" method="POST">
+        <input type="hidden" name="_next" value="https://playpalace.dev/thanks.html" />
+        <div class="form-group">
+          <label for="name">Your Name <span class="required">*</span></label>
+          <input type="text" id="name" name="name" required placeholder="John Doe" />
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email Address <span class="required">*</span></label>
+          <input type="email" id="email" name="email" required placeholder="you@example.com" />
+          <p class="helper-text">We'll only use this to respond to your feedback.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="category">Feedback Type <span class="required">*</span></label>
+          <select id="category" name="category" required>
+            <option value="">Select a category...</option>
+            <option value="bug">Bug Report</option>
+            <option value="feature">Feature Request</option>
+            <option value="improvement">Improvement Suggestion</option>
+            <option value="question">Question / Help</option>
+            <option value="praise">Praise / Compliment</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="form-group show-when-other" id="other-specify-group">
+          <label for="other-specify">Please Specify <span class="required">*</span></label>
+          <input type="text" id="other-specify" name="other_specify" placeholder="Describe the type of feedback" />
+          <p class="helper-text">Required when 'Other' is selected.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="subject">Subject <span class="required">*</span></label>
+          <input type="text" id="subject" name="subject" required placeholder="Brief summary of your feedback" />
+        </div>
+
+        <div class="form-group">
+          <label for="message">Message <span class="required">*</span></label>
+          <textarea id="message" name="message" required placeholder="Please provide as much detail as possible. For bugs, include steps to reproduce, expected behavior, and what actually happened."></textarea>
+          <p class="helper-text">Minimum 20 characters.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="version">Client Version</label>
+          <input type="text" id="version" name="version" placeholder="e.g., v11.2.3 (optional)" />
+          <p class="helper-text">If reporting a bug, please include your client version.</p>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submit-btn">
+          Send Feedback
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <ul class="footer-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/releases">Downloads</a></li>
+        <li><a href="/feedback">Feedback</a></li>
+        <li><a href="https://github.com/James-Trimble/PlayPalace11" target="_blank" rel="noopener">GitHub (Fork)</a></li>
+        <li><a href="https://github.com/XGDevGroup/PlayPalace11" target="_blank" rel="noopener">GitHub (Original)</a></li>
+      </ul>
+      <p class="copyright">© <span id="year"></span> PlayPalace. Open source, accessible gaming platform.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Update copyright year
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    const form = document.getElementById('feedback-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const successMsg = document.getElementById('success-message');
+    const errorMsg = document.getElementById('error-message');
+    const messageField = document.getElementById('message');
+    const categoryField = document.getElementById('category');
+    const otherSpecifyGroup = document.getElementById('other-specify-group');
+    const otherSpecifyField = document.getElementById('other-specify');
+
+    // Show/hide other specify field
+    categoryField.addEventListener('change', () => {
+      if (categoryField.value === 'other') {
+        otherSpecifyGroup.classList.add('visible');
+        otherSpecifyField.required = true;
+      } else {
+        otherSpecifyGroup.classList.remove('visible');
+        otherSpecifyField.required = false;
+        otherSpecifyField.value = '';
+      }
+    });
+
+    // Form validation
+    messageField.addEventListener('input', () => {
+      if (messageField.value.length < 20 && messageField.value.length > 0) {
+        messageField.setCustomValidity('Message must be at least 20 characters long.');
+      } else {
+        messageField.setCustomValidity('');
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      // Hide any previous messages
+      successMsg.classList.add('hidden');
+      errorMsg.classList.add('hidden');
+      
+      // Disable submit button
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending...';
+
+      try {
+        const formData = new FormData(form);
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          successMsg.classList.remove('hidden');
+          form.reset();
+          // Scroll to success message
+          successMsg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+          throw new Error('Form submission failed');
+        }
+      } catch (error) {
+        errorMsg.classList.remove('hidden');
+        errorMsg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send Feedback';
+      }
+    });
+  </script>
+</body>
+</html>

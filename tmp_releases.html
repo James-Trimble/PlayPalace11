@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Downloads | PlayPalace</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+    :root {
+      --bg: #0b1324;
+      --panel: #111b32;
+      --panel-2: #0f1728;
+      --accent: #5ef0ff;
+      --accent-2: #a7ff4f;
+      --text: #f5f7ff;
+      --muted: #9fb3d9;
+      --border: #1f2b43;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(94,240,255,0.14), transparent 40%),
+                  radial-gradient(circle at 80% 0%, rgba(167,255,79,0.12), transparent 35%),
+                  var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header/Footer Navigation */
+    nav {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    nav .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    nav .logo {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+      letter-spacing: -0.5px;
+    }
+
+    nav .nav-links {
+      display: flex;
+      gap: 20px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    nav a:hover, nav a.active {
+      color: var(--accent);
+    }
+
+    footer {
+      margin-top: auto;
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+      padding: 24px;
+      text-align: center;
+    }
+
+    footer .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    footer .footer-links {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      list-style: none;
+      margin: 0 0 16px;
+      padding: 0;
+      flex-wrap: wrap;
+    }
+
+    footer a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    footer a:hover {
+      color: var(--accent);
+    }
+
+    footer .copyright {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* Main Content */
+    main {
+      flex: 1;
+      max-width: 800px;
+      margin: 48px auto;
+      padding: 0 24px;
+      width: 100%;
+    }
+
+    .page-header {
+      margin-bottom: 32px;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      margin: 0 0 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .version {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 0 0 16px;
+    }
+
+    .info {
+      color: var(--muted);
+      line-height: 1.6;
+      margin: 8px 0;
+    }
+
+    .whats-new {
+      background: rgba(94,240,255,0.08);
+      border-left: 3px solid var(--accent);
+      padding: 14px 18px;
+      margin: 18px 0;
+      border-radius: 6px;
+    }
+
+    .whats-new strong {
+      color: var(--accent);
+      display: block;
+      margin-bottom: 6px;
+      font-size: 1.05rem;
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, var(--accent), #7bf2ff);
+      color: #051022;
+      border-radius: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      letter-spacing: 0.2px;
+      box-shadow: 0 14px 40px rgba(94, 240, 255, 0.28);
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      margin-top: 18px;
+    }
+
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 48px rgba(94, 240, 255, 0.35);
+    }
+
+    #loading {
+      text-align: center;
+      color: var(--muted);
+      padding: 32px;
+    }
+
+    @media (max-width: 640px) {
+      h1 { font-size: 1.8rem; }
+      .card { padding: 20px; }
+      nav .container { justify-content: center; }
+      nav .nav-links { justify-content: center; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">PlayPalace</a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/releases" class="active">Downloads</a></li>
+        <li><a href="/feedback">Feedback</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>Downloads</h1>
+      <p class="subtitle">Get the latest version of the accessible multiplayer gaming platform</p>
+    </div>
+
+    <div id="loading">Loading release information...</div>
+    <div id="release-info"></div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <ul class="footer-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/releases">Downloads</a></li>
+        <li><a href="/feedback">Feedback</a></li>
+        <li><a href="https://github.com/James-Trimble/PlayPalace11" target="_blank" rel="noopener">GitHub (Fork)</a></li>
+        <li><a href="https://github.com/XGDevGroup/PlayPalace11" target="_blank" rel="noopener">GitHub (Original)</a></li>
+      </ul>
+      <p class="copyright">© <span id="footer-year"></span> PlayPalace. Open source, accessible gaming platform.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Update copyright year
+    document.getElementById('footer-year').textContent = new Date().getFullYear();
+
+    fetch('/releases/latest.json')
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('loading').style.display = 'none';
+        const releaseDiv = document.getElementById('release-info');
+        
+        const card = document.createElement('div');
+        card.className = 'card';
+        
+        const version = document.createElement('div');
+        version.className = 'version';
+        version.textContent = `PlayPalace ${data.version}`;
+        card.appendChild(version);
+        
+        if (data.whats_new) {
+          const whatsNew = document.createElement('div');
+          whatsNew.className = 'whats-new';
+          whatsNew.innerHTML = `<strong>What's New:</strong>${data.whats_new}`;
+          card.appendChild(whatsNew);
+        }
+        
+        if (data.notes) {
+          const notes = document.createElement('div');
+          notes.className = 'info';
+          notes.textContent = data.notes;
+          card.appendChild(notes);
+        }
+        
+        const downloadBtn = document.createElement('a');
+        downloadBtn.className = 'download-btn';
+        downloadBtn.href = data.url;
+        downloadBtn.textContent = `Download PlayPalace ${data.version}`;
+        card.appendChild(downloadBtn);
+        
+        releaseDiv.appendChild(card);
+      })
+      .catch(err => {
+        document.getElementById('loading').innerHTML = 
+          '<div class="card"><p style="color: #ff6b6b;">Unable to load release information. Please try again later.</p></div>';
+        console.error('Error loading release info:', err);
+      });
+  </script>
+</body>
+</html>

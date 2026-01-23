@@ -18,11 +18,12 @@ from ..games.registry import GameRegistry, get_game_class
 from ..messages.localization import Localization
 
 
-VERSION = "11.2.2"
+VERSION = "11.2.3"
 
 # Default paths based on module location
 _MODULE_DIR = Path(__file__).parent.parent
 _DEFAULT_LOCALES_DIR = _MODULE_DIR / "locales"
+_DEFAULT_MOTD_FILE = _MODULE_DIR / "motd.json"
 
 
 class Server:
@@ -66,6 +67,10 @@ class Server:
         if locales_dir is None:
             locales_dir = _DEFAULT_LOCALES_DIR
         Localization.init(Path(locales_dir))
+
+        # Load MOTD
+        self._motd_file = _DEFAULT_MOTD_FILE
+        self._motd_data = self._load_motd()
 
     async def start(self) -> None:
         """Start the server."""
@@ -325,6 +330,9 @@ class Server:
         # Send game list
         await self._send_game_list(client)
 
+        # Send MOTD (Message of the Day)
+        await self._send_motd(client)
+
         # Check if user is in a table
         table = self._tables.find_user_table(username)
 
@@ -405,6 +413,37 @@ class Server:
                 "languages": self.LANGUAGES,
             }
         )
+
+    def _load_motd(self) -> dict:
+        """Load MOTD data from JSON file."""
+        try:
+            if self._motd_file.exists():
+                with open(self._motd_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"Warning: Could not load MOTD file: {e}")
+        return {"messages": []}
+
+    def _get_active_motd(self) -> dict | None:
+        """Get the first active MOTD message."""
+        for message in self._motd_data.get("messages", []):
+            if message.get("active", False):
+                return message
+        return None
+
+    async def _send_motd(self, client: ClientConnection) -> None:
+        """Send active MOTD to the client."""
+        motd = self._get_active_motd()
+        if motd:
+            await client.send(
+                {
+                    "type": "motd",
+                    "id": motd.get("id", ""),
+                    "title": motd.get("title", "Message of the Day"),
+                    "message": motd.get("message", ""),
+                    "dismissable": motd.get("dismissable", True),
+                }
+            )
 
     def _show_main_menu(self, user: NetworkUser) -> None:
         """Show the main menu to a user."""
