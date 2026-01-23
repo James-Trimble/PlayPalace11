@@ -155,6 +155,13 @@ def check_table_pw():
     client.network.send_packet({"type": "check_table_pw_cmd"})
 
 
+@arg_parser(0)
+def check_update():
+    """Manually trigger a client update check."""
+    if hasattr(client, "run_update_check"):
+        client.run_update_check(force=True, silent=False)
+
+
 aliases = (
     (
         admins,
@@ -181,4 +188,5 @@ aliases = (
     (set_table_pw, {"setpw"}),
     (remove_table_pw, {"removepw"}),
     (check_table_pw, {"checkpw"}),
+    (check_update, {"checkupdate", "update"}),
 )

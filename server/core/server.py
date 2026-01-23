@@ -18,7 +18,18 @@ from ..games.registry import GameRegistry, get_game_class
 from ..messages.localization import Localization
 
 
-VERSION = "11.2.4"
+VERSION = "11.2.5"
+
+# Minimum client version required to connect
+# Format: (major, minor, patch)
+# Examples:
+#   (11, 2, 5) - Requires exactly 11.2.5 or newer
+#   (12, 0, 0) - Force all clients to upgrade to v12
+#   (11, 0, 0) - Allow any 11.x.x client (most lenient)
+# 
+# When to tighten: protocol changes, security fixes, required features
+# When to relax: bug fixes only, backward-compatible changes
+MIN_CLIENT_VERSION = (11, 2, 5)
 
 # Default paths based on module location
 _MODULE_DIR = Path(__file__).parent.parent
@@ -268,6 +279,33 @@ class Server:
         """Handle authorization packet."""
         username = packet.get("username", "")
         password = packet.get("password", "")
+
+        # Enforce minimum client version
+        major = packet.get("major", 0)
+        minor = packet.get("minor", 0)
+        patch = packet.get("patch", 0)
+        client_version = (int(major), int(minor), int(patch))
+        
+        if client_version < MIN_CLIENT_VERSION:
+            min_ver_str = f"{MIN_CLIENT_VERSION[0]}.{MIN_CLIENT_VERSION[1]}.{MIN_CLIENT_VERSION[2]}"
+            rejection_reason = (
+                f"Please update to PlayPalace {min_ver_str} or newer to continue. "
+                "This version is required for improved security and features. "
+                f"Download the latest client at https://playpalace.dev/releases/PlayPalace-{min_ver_str}.zip"
+            )
+            
+            await client.send(
+                {
+                    "type": "disconnect",
+                    "reason": rejection_reason,
+                    "reconnect": False,
+                }
+            )
+            
+            # Give client time to receive the packet before connection closes
+            await asyncio.sleep(0.5)
+            await client.close()
+            return
 
         # Try to authenticate or register
         if not self._auth.authenticate(username, password):

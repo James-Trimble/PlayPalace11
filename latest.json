@@ -1,0 +1,6 @@
+{
+  "version": "11.2.5",
+  "url": "https://playpalace.dev/releases/PlayPalace-11.2.5.zip",
+  "sha256": "6427DFD5CBFC1C601E8EA3F4FB4737A27BBC5E874575DC5DD56655548D81E9F7",
+  "changelog": "Improved: Accessible MOTD, friendly link labels. Fixed update check call indentation. Added server-side min client requirement and client now sends version in authorize packet. Daily update check + /checkupdate."
+}

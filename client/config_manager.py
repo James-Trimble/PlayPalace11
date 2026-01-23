@@ -717,6 +717,15 @@ class ConfigManager:
             self.profiles["dismissed_motds"][server_id].append(motd_id)
             self.save_profiles()
 
+    def get_update_cache(self) -> dict:
+        """Return cached update info (e.g., last check timestamp, last seen version)."""
+        return self.profiles.get("update_cache", {})
+
+    def set_update_cache(self, data: dict):
+        """Persist update cache info."""
+        self.profiles["update_cache"] = data
+        self.save_profiles()
+
     def _deep_copy(self, obj: Any) -> Any:
         """Deep copy a nested dict/list structure."""
         if isinstance(obj, dict):

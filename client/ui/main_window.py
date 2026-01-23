@@ -7,11 +7,17 @@ import accessible_output2.outputs.auto as auto_output
 import sys
 import os
 import json
+import webbrowser
+from datetime import datetime, timedelta
 from pathlib import Path
+from urllib import request
 
 # Add parent directory to path to import sound_manager and network_manager
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from . import slash_commands
+
+
+CLIENT_VERSION = "11.2.5"
 from sound_manager import SoundManager
 from network_manager import NetworkManager
 from buffer_system import BufferSystem
@@ -637,6 +643,15 @@ class MainWindow(wx.Frame):
         if selection == wx.NOT_FOUND:
             return
 
+        # Check if this is an exit/disconnect action
+        selection_id = None
+        if 0 <= selection < len(self.current_menu_item_ids):
+            selection_id = self.current_menu_item_ids[selection]
+            
+            # If user selects exit, mark as intentional disconnect
+            if selection_id and selection_id.lower() in ["exit", "disconnect", "quit", "logout"]:
+                self.expecting_disconnect = True
+
         # Send menu event to server with selection index and ID
         if self.connected:
             packet = {
@@ -647,10 +662,8 @@ class MainWindow(wx.Frame):
             if self.current_menu_id:
                 packet["menu_id"] = self.current_menu_id
             # Include selection_id if available
-            if 0 <= selection < len(self.current_menu_item_ids):
-                item_id = self.current_menu_item_ids[selection]
-                if item_id is not None:
-                    packet["selection_id"] = item_id
+            if selection_id is not None:
+                packet["selection_id"] = selection_id
             self.network.send_packet(packet)
 
         event.Skip()
@@ -1025,7 +1038,7 @@ class MainWindow(wx.Frame):
             self.add_history(f"Connecting as {username}...")
 
             # Set a timeout to detect if connection never succeeds
-            wx.CallLater(10000, self._check_connection_timeout)
+            self.connection_timeout_timer = wx.CallLater(10000, self._check_connection_timeout)
         else:
             self._show_connection_error("Failed to start connection to server.")
 
@@ -1074,12 +1087,56 @@ class MainWindow(wx.Frame):
             # Wait 3 seconds then reconnect
             wx.CallLater(3000, reconnect)
         else:
+            # Set flags FIRST to prevent connection_lost from triggering
             self.expecting_disconnect = True
-            # Prevent connection-lost callback from firing a second dialog
-            self.network.should_stop = True
-            # Explicit disconnect, close the client
-            self.speaker.speak("Disconnected.", interrupt=False)
-            wx.CallLater(500, self.Close)
+            
+            # Cancel connection timeout timer if it exists
+            if hasattr(self, 'connection_timeout_timer') and self.connection_timeout_timer:
+                self.connection_timeout_timer.Stop()
+            
+            # Stop music
+            self.sound_manager.stop_music(fade=False)
+            
+            # Server has already closed connection, don't call disconnect()
+            # Just show the dialog
+            reason = packet.get("reason", "Connection closed by server")
+            self.speaker.speak(reason, interrupt=False)
+            
+            # Check if there's a download URL in the reason
+            download_url = None
+            if "https://" in reason or "http://" in reason:
+                # Extract URL from reason text
+                import re
+                url_match = re.search(r'https?://[^\s]+', reason)
+                if url_match:
+                    download_url = url_match.group(0)
+            
+            # Show appropriate dialog
+            if download_url:
+                # Custom dialog with download button
+                dlg = UpdateRequiredDialog(self, reason, download_url)
+                dlg.ShowModal()
+                dlg.Destroy()
+            else:
+                # Standard message dialog
+                dlg = wx.MessageDialog(
+                    self,
+                    reason,
+                    "Connection Closed",
+                    wx.OK | wx.ICON_INFORMATION
+                )
+                dlg.ShowModal()
+                dlg.Destroy()
+            
+            # Close immediately after dialog
+            def safe_close():
+                try:
+                    self.Close()
+                except Exception as e:
+                    print(f"Error closing window: {e}")
+                    import sys
+                    sys.exit(0)
+            safe_close()
 
     def _do_reconnect(self, server_url, username, password):
         """Actually perform the reconnection attempt."""
@@ -1144,6 +1201,11 @@ class MainWindow(wx.Frame):
         self.connected = True
         self.expecting_disconnect = False
         self.expecting_reconnect = False
+        
+        # Cancel connection timeout timer if it exists
+        if hasattr(self, 'connection_timeout_timer') and self.connection_timeout_timer:
+            self.connection_timeout_timer.Stop()
+        
         version = packet.get("version", "unknown")
 
         # Update window title with server version
@@ -1154,6 +1216,9 @@ class MainWindow(wx.Frame):
         self.sound_manager.play("welcome.ogg", volume=1.0)
 
         self.add_history(f"Connected to server version {version}")
+
+        # Check for updates once per launch (cached daily)
+        self.run_update_check(force=False, silent=True)
 
     def on_server_motd(self, packet):
         """Handle MOTD (Message of the Day) packet from server."""
@@ -1878,3 +1943,148 @@ class MainWindow(wx.Frame):
         except Exception:
             # Silently fail if we can't save preferences
             pass
+
+    # ------------------------------------------------------------------
+    # Update checking
+
+    def run_update_check(self, force: bool = False, silent: bool = True):
+        """Check releases/latest.json and prompt if a newer version exists."""
+        if not self.config_manager:
+            return
+
+        try:
+            if not force and not self._should_check_updates():
+                return
+
+            meta = self._fetch_latest_metadata()
+            if not meta:
+                if not silent:
+                    wx.MessageBox("Could not check for updates.", "Update", wx.OK | wx.ICON_INFORMATION)
+                return
+
+            latest_version = meta.get("version") or ""
+            download_url = meta.get("url") or ""
+            changelog = meta.get("changelog") or ""
+
+            current = self._parse_version(CLIENT_VERSION)
+            latest = self._parse_version(latest_version)
+
+            cache = self.config_manager.get_update_cache() or {}
+            cache["last_check"] = datetime.utcnow().isoformat()
+            cache["last_version"] = latest_version
+            self.config_manager.set_update_cache(cache)
+
+            if not latest_version or latest <= current:
+                if not silent:
+                    wx.MessageBox("You are up to date.", "Update", wx.OK | wx.ICON_INFORMATION)
+                return
+
+            lines = [
+                f"A newer version is available: {latest_version} (you have {CLIENT_VERSION}).",
+            ]
+            if changelog:
+                lines.append(f"\nChangelog:\n{changelog}")
+            if download_url:
+                lines.append(f"\nDownload: {download_url}")
+
+            dlg = wx.MessageDialog(
+                self,
+                "\n".join(lines),
+                "Update Available",
+                style=wx.YES_NO | wx.ICON_INFORMATION,
+            )
+            dlg.SetYesNoLabels("Download", "Later")
+            if dlg.ShowModal() == wx.ID_YES and download_url:
+                webbrowser.open(download_url)
+            dlg.Destroy()
+
+        except Exception as exc:
+            if not silent:
+                wx.MessageBox(f"Update check failed: {exc}", "Update", wx.OK | wx.ICON_WARNING)
+
+    def _should_check_updates(self) -> bool:
+        """Return True if enough time has passed since the last check (24h)."""
+        cache = self.config_manager.get_update_cache() or {}
+        last = cache.get("last_check") if isinstance(cache, dict) else None
+        if last:
+            try:
+                last_dt = datetime.fromisoformat(last)
+                if datetime.utcnow() - last_dt < timedelta(hours=24):
+                    return False
+            except Exception:
+                pass
+        return True
+
+    def _fetch_latest_metadata(self) -> dict | None:
+        """Download and parse latest.json from the releases endpoint."""
+        latest_url = "https://playpalace.dev/releases/latest.json"
+        with request.urlopen(latest_url, timeout=10) as resp:
+            if resp.status != 200:
+                return None
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw)
+
+    @staticmethod
+    def _parse_version(ver: str):
+        """Convert semantic-ish version to tuple for comparison."""
+        if not ver:
+            return (0,)
+        parts = []
+        for chunk in ver.split("."):
+            try:
+                parts.append(int(chunk))
+            except ValueError:
+                parts.append(0)
+        return tuple(parts)
+
+
+class UpdateRequiredDialog(wx.Dialog):
+    """Dialog shown when client version is too old, with download button."""
+
+    def __init__(self, parent, message, download_url):
+        super().__init__(
+            parent,
+            title="Update Required",
+            style=wx.DEFAULT_DIALOG_STYLE | wx.STAY_ON_TOP
+        )
+        
+        self.download_url = download_url
+        
+        # Main vertical sizer
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Message text (static text for screen readers)
+        message_text = wx.StaticText(self, label=message)
+        message_text.Wrap(400)
+        main_sizer.Add(message_text, 0, wx.ALL | wx.EXPAND, 10)
+        
+        # Button sizer (horizontal)
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        # Download button
+        download_btn = wx.Button(self, label="Download Update")
+        download_btn.Bind(wx.EVT_BUTTON, self.on_download)
+        button_sizer.Add(download_btn, 0, wx.ALL, 5)
+        
+        # Close button
+        close_btn = wx.Button(self, wx.ID_OK, label="Close")
+        close_btn.Bind(wx.EVT_BUTTON, self.on_close)
+        button_sizer.Add(close_btn, 0, wx.ALL, 5)
+        
+        main_sizer.Add(button_sizer, 0, wx.ALIGN_CENTER | wx.ALL, 5)
+        
+        self.SetSizer(main_sizer)
+        self.Fit()
+        self.Centre()
+        
+        # Set focus to download button for accessibility
+        download_btn.SetFocus()
+    
+    def on_download(self, event):
+        """Open download URL in default browser."""
+        webbrowser.open(self.download_url)
+        # Don't close dialog yet - let them close it manually after download starts
+    
+    def on_close(self, event):
+        """Close the dialog."""
+        self.EndModal(wx.ID_OK)

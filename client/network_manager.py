@@ -5,6 +5,17 @@ import json
 import threading
 import wx
 import websockets
+
+
+CLIENT_VERSION = "11.2.5"
+
+
+def _version_parts(version: str) -> tuple[int, int, int]:
+    try:
+        major, minor, patch = version.split(".")
+        return int(major), int(minor), int(patch)
+    except Exception:
+        return (0, 0, 0)
 import ssl
 
 
@@ -92,16 +103,17 @@ class NetworkManager:
                 self.ws = websocket
                 self.connected = True
 
-                # Send authorization packet
+                # Send authorization packet (includes client version for compatibility checks)
+                ver_major, ver_minor, ver_patch = _version_parts(CLIENT_VERSION)
                 await websocket.send(
                     json.dumps(
                         {
                             "type": "authorize",
                             "username": username,
                             "password": password,
-                            "major": 11,
-                            "minor": 0,
-                            "patch": 0,
+                            "major": ver_major,
+                            "minor": ver_minor,
+                            "patch": ver_patch,
                         }
                     )
                 )

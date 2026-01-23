@@ -1,9 +1,10 @@
 {
   "messages": [
     {
-      "id": "welcome_2026_01",
-      "title": "Welcome to PlayPalace!",
-      "message": "Welcome to PlayPalace! This server and project are in rapid development.\n\nIf you encounter any bugs, have suggestions, or want to provide feedback, please visit our website at playpalace.dev and reach out via email.\n\nWe appreciate your patience and feedback as we continue improving the platform!",
+      "id": "update-11.2.5-welcome",
+      "title": "Welcome to PlayPalace 11.2.5",
+      "message": "<p>Welcome back to PlayPalace! Here's what's new:</p><ul><li><strong>Lobby Chat</strong>: Everyone not at a table can chat together while browsing games.</li><li><strong>Poker Arrives</strong>: Five Card Draw and Texas Hold'em are ready to play.</li><li><strong>Age of Heroes</strong>: Playable but still in progress—let us know how it feels.</li></ul><p>We value your feedback. Please share thoughts or issues by clicking the feedback button below.</p><p><a href=\"https://playpalace.dev/feedback.html\">Open feedback form</a></p>",
+
       "dismissable": true,
       "active": true
     }
