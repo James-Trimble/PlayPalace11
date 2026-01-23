@@ -18,7 +18,7 @@ from ..games.registry import GameRegistry, get_game_class
 from ..messages.localization import Localization
 
 
-VERSION = "11.2.3"
+VERSION = "11.2.4"
 
 # Default paths based on module location
 _MODULE_DIR = Path(__file__).parent.parent
