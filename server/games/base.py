@@ -314,20 +314,3 @@ class Game(
     def team_manager(self) -> TeamManager:
         """Get the team manager for this game."""
         return self._team_manager
-
-    # Turn management helpers
-
-    @property
-    def current_player(self) -> Player | None:
-        """Return the current player based on turn order.
-
-        Uses serialized `turn_player_ids` and `turn_index` to resolve
-        the active player. Returns None if no turn players are set.
-        """
-        if not self.turn_player_ids:
-            return None
-        # Clamp index in case of desync
-        if self.turn_index < 0 or self.turn_index >= len(self.turn_player_ids):
-            self.turn_index = 0
-        player_id = self.turn_player_ids[self.turn_index]
-        return self.get_player_by_id(player_id)

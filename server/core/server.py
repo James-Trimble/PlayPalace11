@@ -106,17 +106,6 @@ class Server:
         """Stop the server."""
         print("Stopping server...")
 
-        # Broadcast restart warning to all connected clients
-        if self._ws_server:
-            await self._ws_server.broadcast(
-                {
-                    "type": "server_shutdown",
-                    "message": "Server is restarting. Please reconnect in a moment.",
-                }
-            )
-            # Give clients a moment to receive the message
-            await asyncio.sleep(0.5)
-
         # Save all tables
         self._save_tables()
 
@@ -615,8 +604,6 @@ class Server:
             multiletter=True,
             escape_behavior=EscapeBehavior.SELECT_LAST,
         )
-        user.stop_music()
-        user.play_music("settingsmus.ogg")
         self._user_states[user.username] = {"menu": "options_menu"}
 
     def _show_language_menu(self, user: NetworkUser) -> None:
@@ -784,8 +771,8 @@ class Server:
         elif selection_id == "options":
             self._show_options_menu(user)
         elif selection_id == "logout":
-            # Logout immediately
-            await self._perform_logout(user)
+            user.speak_l("goodbye")
+            await user.connection.send({"type": "disconnect", "reconnect": False})
 
     async def _handle_options_selection(
         self, user: NetworkUser, selection_id: str
@@ -846,22 +833,6 @@ class Server:
         """Save user preferences to database."""
         prefs_json = json.dumps(user.preferences.to_dict())
         self._db.update_user_preferences(user.username, prefs_json)
-
-    async def _perform_logout(self, user: NetworkUser) -> None:
-        """Perform the logout sequence."""
-        user.speak_l("goodbye")
-        # Remove user state to prevent menu loop
-        if user.username in self._user_states:
-            del self._user_states[user.username]
-        # Send disconnect message and close connection cleanly
-        try:
-            await user.connection.send({"type": "disconnect", "reconnect": False})
-            # Give client time to receive and process the disconnect message
-            await asyncio.sleep(0.2)
-        except Exception:
-            pass  # Connection might already be closing
-        # Close the connection
-        await user.connection.close()
 
     async def _handle_language_selection(
         self, user: NetworkUser, selection_id: str
@@ -932,8 +903,6 @@ class Server:
                 "menu": "in_game",
                 "table_id": table.table_id,
             }
-            user.stop_music()
-            user.play_music("findgamemus.ogg")
 
         elif selection_id.startswith("table_"):
             table_id = selection_id[6:]  # Remove "table_" prefix
@@ -1010,8 +979,6 @@ class Server:
                         "menu": "in_game",
                         "table_id": table_id,
                     }
-                    user.stop_music()
-                    user.play_music("findgamemus.ogg")
                     return
                 else:
                     # No matching player - join as spectator instead
@@ -1021,8 +988,6 @@ class Server:
                         "menu": "in_game",
                         "table_id": table_id,
                     }
-                    user.stop_music()
-                    user.play_music("findgamemus.ogg")
                     return
 
             if len(game.players) >= game.get_max_players():
@@ -1037,16 +1002,12 @@ class Server:
             game.broadcast_sound("join.ogg")
             game.rebuild_all_menus()
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
-            user.stop_music()
-            user.play_music("findgamemus.ogg")
 
         elif selection_id == "join_spectator":
             table.add_member(user.username, user, as_spectator=True)
             user.speak_l("spectator-joined", host=table.host)
             # TODO: spectator viewing - for now just track membership
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
-            user.stop_music()
-            user.play_music("findgamemus.ogg")
 
         elif selection_id == "back":
             self._show_tables_menu(user, state.get("game_type", ""))
@@ -2183,16 +2144,9 @@ class Server:
         message = packet.get("message", "")
         language = packet.get("language", "English")
 
-        # Handle /me emote
-        is_emote = False
-        if message.startswith("/me "):
-            is_emote = True
-            message = message[4:]  # Remove "/me " prefix
-
         if convo == "table":
             table = self._tables.find_user_table(username)
             if table:
-                # User is at a table, send to table members
                 for member_name in [m.username for m in table.members]:
                     user = self._users.get(member_name)
                     if user:
@@ -2203,21 +2157,6 @@ class Server:
                                 "sender": username,
                                 "message": message,
                                 "language": language,
-                                "is_emote": is_emote,
-                            }
-                        )
-            else:
-                # User not at a table, send to all users not at tables (lobby chat)
-                for user in self._users.values():
-                    if user and not self._tables.find_user_table(user.username):
-                        await user.connection.send(
-                            {
-                                "type": "chat",
-                                "convo": "table",
-                                "sender": username,
-                                "message": message,
-                                "language": language,
-                                "is_emote": is_emote,
                             }
                         )
         elif convo == "global":
@@ -2230,7 +2169,6 @@ class Server:
                         "sender": username,
                         "message": message,
                         "language": language,
-                        "is_emote": is_emote,
                     }
                 )
 
@@ -2259,7 +2197,6 @@ class Server:
             "count": len(players),
             "players": players,
         })
-
 
 async def run_server(
     host: str = "0.0.0.0",

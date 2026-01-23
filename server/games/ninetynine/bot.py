@@ -160,6 +160,14 @@ def _evaluate_quentin_c(
     if 70 <= new_count <= 94:
         score -= (new_count - 70) * 5
 
+    # Pressure zone: make it harder for the next player
+    if 88 <= new_count <= 97:
+        score += 400 if is_two_player else 250
+
+    # Avoid giving the table a very low count
+    if new_count <= 15:
+        score -= 50
+
     # Bonus for safe middle range
     if 40 <= new_count <= 60:
         score += 100
@@ -180,6 +188,14 @@ def _evaluate_rs_games(new_count: int, is_two_player: bool, is_skip: bool) -> in
 
     if 70 <= new_count <= 96:
         score -= (new_count - 70) * 8
+
+    # Pressure zone: make it harder for the next player
+    if 88 <= new_count <= 97:
+        score += 350 if is_two_player else 200
+
+    # Avoid giving the table a very low count
+    if new_count <= 15:
+        score -= 50
 
     if 20 <= new_count <= 60:
         score += 150
@@ -205,6 +221,9 @@ def _score_card(
     # Apply hoarding logic
     base_score += _hoarding_modifier(game, rank)
 
+    # Apply situational bonuses for skip/reverse/pass
+    base_score += _special_card_modifier(game, rank)
+
     return base_score
 
 
@@ -220,7 +239,13 @@ def _score_quentin_c_card(game: "NinetyNineGame", rank: int, count: int) -> int:
         return max(score_plus, score_minus)
     elif rank == 2:
         new_count = _calculate_two_effect(count)
-        return _evaluate_count(game, new_count, rank)
+        score = _evaluate_count(game, new_count, rank)
+        # Treat doubling (non-divide use of 2) as a last resort.
+        if new_count > count:
+            score -= 8000
+        if new_count < count and count >= 80:
+            score += 200
+        return score
     elif rank == 9:
         return _evaluate_count(game, count, rank)
     else:
@@ -279,6 +304,47 @@ def _hoarding_modifier(game: "NinetyNineGame", rank: int) -> int:
                 return 200
 
     return 0
+
+
+def _special_card_modifier(game: "NinetyNineGame", rank: int) -> int:
+    """Small situational bonus for control cards (skip/reverse/pass)."""
+    next_player = _next_alive_player(game)
+    if not next_player:
+        return 0
+
+    alive_count = len([p for p in game.players if p.tokens > 0])
+    low_tokens = next_player.tokens <= 1
+
+    if game.is_quentin_c:
+        if rank == 11:  # Jack skips
+            return 300 if low_tokens else 150
+        if rank == 4 and alive_count > 2:
+            return 150 if low_tokens else 50
+    else:
+        if rank == RS_RANK_SKIP:
+            return 300 if low_tokens else 150
+        if rank == RS_RANK_REVERSE and alive_count > 2:
+            return 150 if low_tokens else 50
+        if rank == RS_RANK_PASS:
+            return 200 if low_tokens else 75
+
+    return 0
+
+
+def _next_alive_player(game: "NinetyNineGame") -> "NinetyNinePlayer | None":
+    """Find the next alive player in turn order."""
+    if not game.turn_player_ids:
+        return None
+
+    step = game.turn_direction
+    idx = game.turn_index
+    for _ in range(len(game.turn_player_ids)):
+        idx = (idx + step) % len(game.turn_player_ids)
+        player = game.get_player_by_id(game.turn_player_ids[idx])
+        if player and player.tokens > 0:
+            return player
+
+    return None
 
 
 def _calculate_two_effect(current_count: int) -> int:

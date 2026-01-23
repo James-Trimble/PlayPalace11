@@ -6,7 +6,7 @@ This is a stateless helper that operates on serialized Player fields:
 - player.bot_target: Game-specific target value
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from ..games.base import Game, Player
@@ -71,6 +71,55 @@ class BotHelper:
     def get_target(player: "Player") -> int | None:
         """Get the game-specific target for a bot."""
         return player.bot_target
+
+    @staticmethod
+    def process_bot_action(
+        bot: "Player",
+        think_fn: Callable[[], str | None],
+        execute_fn: Callable[[str], None],
+    ) -> bool:
+        """
+        Process a single bot's action cycle: think -> pending -> execute.
+
+        This encapsulates the common pattern for bot action handling:
+        1. Count down think ticks if bot is still "thinking"
+        2. Execute pending action if one exists
+        3. Otherwise, call think function to decide what to do
+
+        Args:
+            bot: The bot player to process.
+            think_fn: A callable that returns an action_id (or None if no action).
+            execute_fn: A callable that takes an action_id and executes it.
+
+        Returns:
+            True if the bot took an action (executed or set pending), False if still thinking.
+
+        Example usage:
+            BotHelper.process_bot_action(
+                bot=player,
+                think_fn=lambda: self.bot_think(player),
+                execute_fn=lambda action_id: self.execute_action(player, action_id),
+            )
+        """
+        # Count down thinking time
+        if bot.bot_think_ticks > 0:
+            bot.bot_think_ticks -= 1
+            return False
+
+        # Execute pending action if we have one
+        if bot.bot_pending_action:
+            action_id = bot.bot_pending_action
+            bot.bot_pending_action = None
+            execute_fn(action_id)
+            return True
+
+        # Ask what this bot should do
+        action_id = think_fn()
+        if action_id:
+            bot.bot_pending_action = action_id
+            return True
+
+        return False
 
     @staticmethod
     def on_tick(game: "Game", debug: bool = False) -> None:

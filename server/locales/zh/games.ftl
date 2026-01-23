@@ -70,15 +70,45 @@ suit-spades = 黑桃
 
 # 点数名称
 rank-ace = A
+rank-ace-plural = A
 rank-two = 2
+rank-two-plural = 2
 rank-three = 3
+rank-three-plural = 3
 rank-four = 4
+rank-four-plural = 4
 rank-five = 5
+rank-five-plural = 5
 rank-six = 6
+rank-six-plural = 6
 rank-seven = 7
+rank-seven-plural = 7
 rank-eight = 8
+rank-eight-plural = 8
 rank-nine = 9
+rank-nine-plural = 9
 rank-ten = 10
+rank-ten-plural = 10
 rank-jack = J
+rank-jack-plural = J
 rank-queen = Q
+rank-queen-plural = Q
 rank-king = K
+rank-king-plural = K
+
+# 扑克牌型描述
+poker-high-card-with = { $high }高牌，带{ $rest }
+poker-high-card = { $high }高牌
+poker-pair-with = 一对{ $pair }，带{ $rest }
+poker-pair = 一对{ $pair }
+poker-two-pair-with = 两对{ $high }和{ $low }，带{ $kicker }
+poker-two-pair = 两对{ $high }和{ $low }
+poker-trips-with = 三条{ $trips }，带{ $rest }
+poker-trips = 三条{ $trips }
+poker-straight-high = { $high }高顺子
+poker-flush-high-with = { $high }高同花，带{ $rest }
+poker-full-house = 葫芦，{ $trips }带{ $pair }
+poker-quads-with = 四条{ $quads }，带{ $kicker }
+poker-quads = 四条{ $quads }
+poker-straight-flush-high = { $high }高同花顺
+poker-unknown-hand = 未知牌型

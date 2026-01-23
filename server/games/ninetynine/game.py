@@ -506,6 +506,7 @@ class NinetyNineGame(Game):
         # Initialize player tokens
         for player in active_players:
             player.tokens = self.options.starting_tokens
+        self._sync_team_scores()
 
         # Play music
         self.play_music("game_ninetynine/mus.ogg")
@@ -949,6 +950,16 @@ class NinetyNineGame(Game):
                 user.speak_l("ninetynine-you-lose-tokens", amount=amount)
             else:
                 user.speak_l("ninetynine-player-loses-tokens", player=player.name, amount=amount)
+        self._sync_team_scores()
+
+    def _sync_team_scores(self) -> None:
+        """Mirror player tokens into TeamManager totals for scoreboard output."""
+        for team in self._team_manager.teams:
+            team.total_score = 0
+        for p in self.players:
+            team = self._team_manager.get_team(p.name)
+            if team:
+                team.total_score = p.tokens
 
     def _eliminate_player(self, player: NinetyNinePlayer) -> None:
         """Eliminate a player from the game."""

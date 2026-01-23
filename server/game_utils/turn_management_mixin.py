@@ -19,8 +19,23 @@ class TurnManagementMixin:
         - self.get_user(player) -> User | None
         - self.broadcast_l(message_id, **kwargs)
         - self.rebuild_all_menus()
-        - self.current_player property
     """
+
+    @property
+    def current_player(self) -> "Player | None":
+        """Get the current player based on turn_index and turn_player_ids."""
+        if not self.turn_player_ids:
+            return None
+        index = self.turn_index % len(self.turn_player_ids)
+        player_id = self.turn_player_ids[index]
+        return self.get_player_by_id(player_id)
+
+    @current_player.setter
+    def current_player(self, player: "Player | None") -> None:
+        """Set the current player by updating turn_index."""
+        if player is None or player.id not in self.turn_player_ids:
+            return
+        self.turn_index = self.turn_player_ids.index(player.id)
 
     def set_turn_players(self, players: list["Player"], reset_index: bool = True) -> None:
         """Set the list of players in turn order.

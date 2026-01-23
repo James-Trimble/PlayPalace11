@@ -14,6 +14,8 @@ from ..messages.localization import Localization
 class ActionVisibilityMixin:
     """Mixin providing is_enabled/is_hidden/get_label methods for base actions.
 
+    Also provides player helper methods used by visibility checks.
+
     Expects on the Game class:
         - self.status: str
         - self.host: str
@@ -22,7 +24,6 @@ class ActionVisibilityMixin:
         - self.get_user(player) -> User | None
         - self.get_min_players() -> int
         - self.get_max_players() -> int
-        - self.get_active_player_count() -> int
     """
 
     # Player helper methods

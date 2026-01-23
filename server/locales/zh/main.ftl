@@ -4,6 +4,7 @@
 category-card-games = 纸牌游戏
 category-dice-games = 骰子游戏
 category-rb-play-center = RB Play Center
+category-poker = 扑克
 category-uncategorized = 未分类
 
 # 菜单标题
