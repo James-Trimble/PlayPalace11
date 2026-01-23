@@ -25,6 +25,20 @@ class ActionVisibilityMixin:
         - self.get_active_player_count() -> int
     """
 
+    # Player helper methods
+
+    def _is_player_spectator(self, player: "Player") -> bool:
+        """Check if a player is a spectator."""
+        return player.is_spectator
+
+    def get_active_players(self) -> list["Player"]:
+        """Get list of players who are not spectators (actually playing)."""
+        return [p for p in self.players if not p.is_spectator]
+
+    def get_active_player_count(self) -> int:
+        """Get the number of active (non-spectator) players."""
+        return len(self.get_active_players())
+
     # --- Lobby actions ---
 
     def _is_start_game_enabled(self, player: "Player") -> str | None:

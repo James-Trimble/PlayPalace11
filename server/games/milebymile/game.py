@@ -1387,7 +1387,9 @@ class MileByMileGame(Game):
 
     def on_start(self) -> None:
         """Called when the game starts."""
-        # Teams were already set up in prestart_validate()
+        # Ensure teams are set up; tests may call on_start() directly
+        if not self._team_manager.teams:
+            self._setup_teams()
         self.status = "playing"
         self.game_active = True
         self.current_race = 0
