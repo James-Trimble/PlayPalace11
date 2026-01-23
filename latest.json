@@ -1,6 +1,7 @@
 {
   "version": "11.2.5",
-  "url": "https://playpalace.dev/releases/PlayPalace-11.2.5.zip",
-  "sha256": "6427DFD5CBFC1C601E8EA3F4FB4737A27BBC5E874575DC5DD56655548D81E9F7",
-  "changelog": "Improved: Accessible MOTD, friendly link labels. Fixed update check call indentation. Added server-side min client requirement and client now sends version in authorize packet. Daily update check + /checkupdate."
+  "download_url": "https://playpalace.dev/releases/PlayPalace-11.2.5.zip",
+  "sha256": "AC4CD88DB519D05B2C9C211340C0C89BDE88962B0BD2892DA36FCC5A36043A72",
+  "whats_new": "Version gate with download dialog, ARIA accessibility improvements, MOTD bullet fix, connection dialog cleanup",
+  "notes": "Major update - old clients will be prompted to download this version."
 }

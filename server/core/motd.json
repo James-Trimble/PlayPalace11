@@ -1,10 +1,10 @@
 {
   "messages": [
     {
-      "id": "update-11.2.4-v4",
+      "id": "welcome-11.2.5",
       "active": true,
-      "title": "PlayPalace Update 11.2.4",
-      "message": "PlayPalace version 11.2.4 is now available with exciting new features!\n\n**What's New:**\n• Game Lobby Chat - Players not in a table can now chat together in the lobby and while browsing games\n• New Games: Five Card Draw Poker, Texas Hold'em Poker, and Age of Heroes\n\n**Feedback:**\nHave suggestions? Visit playpalace.dev/feedback.html to share your thoughts.\n\nDownload the latest client today!"
+      "title": "Welcome to PlayPalace",
+      "message": "Welcome to PlayPalace! Enjoy playing games with friends.\n\nHave feedback or found a bug? Visit playpalace.dev to reach out.\n\nWe appreciate your support!"
     }
   ]
 }
