@@ -1,4 +1,4 @@
-"""Registration dialog for Play Palace v9 client."""
+"""Registration dialog for Play Palace v11 client (authorize-based)."""
 
 import wx
 import json
@@ -13,7 +13,7 @@ class RegistrationDialog(wx.Dialog):
 
     def __init__(self, parent, server_url):
         """Initialize the registration dialog."""
-        super().__init__(parent, title="Create Play Palace Account", size=(500, 450))
+        super().__init__(parent, title="Create Play Palace Account", size=(500, 360))
 
         self.server_url = server_url
         self._create_ui()
@@ -35,7 +35,9 @@ class RegistrationDialog(wx.Dialog):
         # Info text
         info_text = wx.StaticText(
             panel,
-            label="Your account will require admin approval before you can log in.",
+            label=(
+                "Create a username and password. Your account is registered on first authorize."
+            ),
         )
         sizer.Add(info_text, 0, wx.ALL | wx.CENTER, 5)
 
@@ -52,13 +54,6 @@ class RegistrationDialog(wx.Dialog):
         username_help.SetForegroundColour(wx.Colour(100, 100, 100))
         sizer.Add(username_help, 0, wx.LEFT | wx.RIGHT, 10)
 
-        # Email
-        email_label = wx.StaticText(panel, label="&Email:")
-        sizer.Add(email_label, 0, wx.LEFT | wx.TOP, 10)
-
-        self.email_input = wx.TextCtrl(panel)
-        sizer.Add(self.email_input, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
-
         # Password
         password_label = wx.StaticText(panel, label="&Password:")
         sizer.Add(password_label, 0, wx.LEFT | wx.TOP, 10)
@@ -73,16 +68,8 @@ class RegistrationDialog(wx.Dialog):
         self.confirm_input = wx.TextCtrl(panel, style=wx.TE_PASSWORD)
         sizer.Add(self.confirm_input, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
-        # Bio
-        bio_label = wx.StaticText(panel, label="&Bio:")
-        sizer.Add(bio_label, 0, wx.LEFT | wx.TOP, 10)
-
-        self.bio_input = wx.TextCtrl(panel, style=wx.TE_MULTILINE, size=(0, 80))
-        sizer.Add(self.bio_input, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
-
-        bio_help = wx.StaticText(panel, label="Tell us a bit about yourself")
-        bio_help.SetForegroundColour(wx.Colour(100, 100, 100))
-        sizer.Add(bio_help, 0, wx.LEFT | wx.RIGHT, 10)
+        # Spacer for layout
+        sizer.Add((-1, 10))
 
         # Buttons
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -109,22 +96,13 @@ class RegistrationDialog(wx.Dialog):
     def on_register(self, event):
         """Handle register button click."""
         username = self.username_input.GetValue().strip()
-        email = self.email_input.GetValue().strip()
         password = self.password_input.GetValue()
         confirm = self.confirm_input.GetValue()
-        bio = self.bio_input.GetValue().strip()
 
         # Validate fields
         if not username:
             wx.MessageBox("Please enter a username", "Error", wx.OK | wx.ICON_ERROR)
             self.username_input.SetFocus()
-            return
-
-        if not email:
-            wx.MessageBox(
-                "Please enter an email address", "Error", wx.OK | wx.ICON_ERROR
-            )
-            self.email_input.SetFocus()
             return
 
         if not password:
@@ -137,34 +115,29 @@ class RegistrationDialog(wx.Dialog):
             self.confirm_input.SetFocus()
             return
 
-        if not bio:
-            wx.MessageBox("Please enter a bio", "Error", wx.OK | wx.ICON_ERROR)
-            self.bio_input.SetFocus()
-            return
-
         # Disable button during registration
         self.register_btn.Enable(False)
 
         # Send registration to server
-        self._send_registration(username, email, password, bio)
+        self._send_registration(username, password)
 
-    def _send_registration(self, username, email, password, bio):
+    def _send_registration(self, username, password):
         """Send registration packet to server."""
         # Run in a thread to avoid blocking UI
         thread = threading.Thread(
             target=self._register_thread,
-            args=(username, email, password, bio),
+            args=(username, password),
             daemon=True,
         )
         thread.start()
 
-    def _register_thread(self, username, email, password, bio):
+    def _register_thread(self, username, password):
         """Thread to handle registration."""
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(
-                self._send_register_packet(username, email, password, bio)
+                self._send_authorize_packet(username, password)
             )
             loop.close()
 
@@ -173,8 +146,8 @@ class RegistrationDialog(wx.Dialog):
         except Exception as e:
             wx.CallAfter(self._show_registration_result, f"Connection error: {str(e)}")
 
-    async def _send_register_packet(self, username, email, password, bio):
-        """Send registration packet and wait for response."""
+    async def _send_authorize_packet(self, username, password):
+        """Send authorize packet; server auto-registers if user doesn't exist."""
         try:
             # Create SSL context that allows self-signed certificates
             ssl_context = None
@@ -184,27 +157,31 @@ class RegistrationDialog(wx.Dialog):
                 ssl_context.verify_mode = ssl.CERT_NONE
 
             async with websockets.connect(self.server_url, ssl=ssl_context) as ws:
-                # Send registration packet
+                # Send authorize packet (triggers registration if user doesn't exist)
                 await ws.send(
                     json.dumps(
                         {
-                            "type": "register",
+                            "type": "authorize",
                             "username": username,
-                            "email": email,
                             "password": password,
-                            "bio": bio,
+                            "major": 11,
+                            "minor": 2,
+                            "patch": 5,
                         }
                     )
                 )
 
-                # Wait for response (server will send a "speak" message)
+                # Wait for response
                 message = await asyncio.wait_for(ws.recv(), timeout=5.0)
                 data = json.loads(message)
 
-                if data.get("type") == "speak":
-                    return data.get("text", "Registration successful")
-                else:
-                    return "Unexpected response from server"
+                pkt_type = data.get("type")
+                if pkt_type == "authorize_success":
+                    return "Account created and authorized successfully"
+                if pkt_type == "disconnect":
+                    reason = data.get("reason", "Registration failed")
+                    return f"Registration failed: {reason}"
+                return "Unexpected response from server"
 
         except asyncio.TimeoutError:
             return "Server did not respond in time"
@@ -216,7 +193,7 @@ class RegistrationDialog(wx.Dialog):
         self.register_btn.Enable(True)
 
         # Check if it was successful
-        if "successfully" in message.lower() or "approval" in message.lower():
+        if "successfully" in message.lower():
             wx.MessageBox(
                 message, "Registration Successful", wx.OK | wx.ICON_INFORMATION
             )

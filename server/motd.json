@@ -1,9 +1,9 @@
 {
   "messages": [
     {
-      "id": "welcome_2026_01",
-      "title": "Welcome to PlayPalace!",
-      "message": "Welcome to PlayPalace! This server and project are in rapid development.\n\nIf you encounter any bugs, have suggestions, or want to provide feedback, please visit our website at playpalace.dev and reach out via email.\n\nWe appreciate your patience and feedback as we continue improving the platform!",
+      "id": "welcome_motd_11.2.5",
+      "title": "Welcome to PlayPalace 11.2.5!",
+      "message": "<h2>Welcome to PlayPalace!</h2><p>This server and project are in rapid development.</p><p>If you encounter any bugs, have suggestions, or want to provide feedback, please fill out our <a href=\"https://playpalace.dev/feedback.html\">feedback form</a>.</p><p>We appreciate your patience and feedback as we continue improving the platform!</p>",
       "dismissable": true,
       "active": true
     }

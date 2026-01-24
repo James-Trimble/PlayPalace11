@@ -1,5 +1,9 @@
 """MOTD (Message of the Day) dialog for Play Palace client."""
 
+import webbrowser
+import re
+import html as html_lib
+
 import wx
 
 
@@ -30,13 +34,30 @@ class MOTDDialog(wx.Dialog):
         panel = wx.Panel(self)
         sizer = wx.BoxSizer(wx.VERTICAL)
 
-        # Message text (multiline, read-only)
+        # Convert HTML to accessible plain text and extract links
+        text_content, links = self._html_to_accessible_text_and_links(message)
+
+        # Accessible message text (multiline, read-only)
         message_text = wx.TextCtrl(
             panel,
-            value=message,
+            value=text_content,
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP,
+            size=(480, 300),
         )
+        message_text.SetName("Message of the Day")
         sizer.Add(message_text, 1, wx.EXPAND | wx.ALL, 10)
+
+        # Links section (accessible, focusable controls)
+        if links:
+            for text, href in links:
+                # Accessible button to open the link; hide raw URLs from users
+                btn_label = f"&Open {text}" if text else "&Open Link"
+                # Special-case known forms for clearer labeling
+                if "feedback" in (text or "").lower():
+                    btn_label = "&Open Feedback Form"
+                open_btn = wx.Button(panel, label=btn_label)
+                open_btn.Bind(wx.EVT_BUTTON, lambda evt, url=href: webbrowser.open(url))
+                sizer.Add(open_btn, 0, wx.LEFT | wx.RIGHT | wx.TOP, 10)
 
         # Don't show again checkbox (if dismissable)
         if dismissable:
@@ -62,6 +83,47 @@ class MOTDDialog(wx.Dialog):
 
         # Focus the message text so screen readers read it immediately
         message_text.SetFocus()
+
+    def _html_to_accessible_text_and_links(self, html: str) -> tuple[str, list[tuple[str, str]]]:
+        """Convert limited HTML to accessible plain text and extract links.
+
+        Returns (text_content, links) where links is a list of (text, href).
+        """
+        if not html:
+            return "", []
+
+        # Extract links first
+        links: list[tuple[str, str]] = []
+        def anchor_replacer(match: re.Match) -> str:
+            text = html_lib.unescape(match.group(2) or "")
+            href = match.group(1)
+            if href:
+                links.append((text or href, href))
+            # Replace anchor with just its text in the accessible content
+            return text or ""
+
+        anchor_pattern = re.compile(r"<a\s+[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)
+        content = anchor_pattern.sub(anchor_replacer, html)
+
+        # Replace headings with simple emphasized text
+        content = re.sub(r"<h[1-6][^>]*>(.*?)</h[1-6]>", lambda m: f"\n\n{html_lib.unescape(m.group(1)).strip()}\n\n", content, flags=re.IGNORECASE | re.DOTALL)
+
+        # Replace paragraphs and breaks with newlines
+        content = re.sub(r"<p[^>]*>", "\n\n", content, flags=re.IGNORECASE)
+        content = re.sub(r"</p>", "", content, flags=re.IGNORECASE)
+        content = re.sub(r"<br\s*/?>", "\n", content, flags=re.IGNORECASE)
+
+        # Strip remaining tags
+        content = re.sub(r"<[^>]+>", "", content)
+
+        # Unescape HTML entities
+        content = html_lib.unescape(content)
+
+        # Normalize whitespace
+        content = re.sub(r"\s+\n", "\n", content)
+        content = content.strip()
+
+        return content, links
 
     def on_ok(self, event):
         """Handle OK button click."""

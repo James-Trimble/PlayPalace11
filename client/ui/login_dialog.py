@@ -74,7 +74,6 @@ class LoginDialog(wx.Dialog):
         button_sizer.Add(self.login_btn, 0, wx.RIGHT, 5)
 
         self.create_account_btn = wx.Button(self.panel, label="Create &Account")
-        self.create_account_btn.Hide()
         button_sizer.Add(self.create_account_btn, 0, wx.RIGHT, 5)
 
         cancel_btn = wx.Button(self.panel, wx.ID_CANCEL, "&Cancel")
