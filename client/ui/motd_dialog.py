@@ -50,11 +50,8 @@ class MOTDDialog(wx.Dialog):
         # Links section (accessible, focusable controls)
         if links:
             for text, href in links:
-                # Accessible button to open the link; hide raw URLs from users
-                btn_label = f"&Open {text}" if text else "&Open Link"
-                # Special-case known forms for clearer labeling
-                if "feedback" in (text or "").lower():
-                    btn_label = "&Open Feedback Form"
+                # Accessible button to open the link with fixed access key
+                btn_label = "Open &Link"
                 open_btn = wx.Button(panel, label=btn_label)
                 open_btn.Bind(wx.EVT_BUTTON, lambda evt, url=href: webbrowser.open(url))
                 sizer.Add(open_btn, 0, wx.LEFT | wx.RIGHT | wx.TOP, 10)
@@ -99,7 +96,7 @@ class MOTDDialog(wx.Dialog):
             href = match.group(1)
             if href:
                 links.append((text or href, href))
-            # Replace anchor with just its text in the accessible content
+            # Replace anchor with just its text in accessible content (no URL shown)
             return text or ""
 
         anchor_pattern = re.compile(r"<a\s+[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)

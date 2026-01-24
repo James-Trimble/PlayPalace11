@@ -18,7 +18,7 @@ from ..games.registry import GameRegistry, get_game_class
 from ..messages.localization import Localization
 
 
-VERSION = "11.2.3"
+VERSION = "11.2.5"
 
 # Default paths based on module location
 _MODULE_DIR = Path(__file__).parent.parent
@@ -2175,19 +2175,6 @@ class Server:
     async def _handle_ping(self, client: ClientConnection) -> None:
         """Handle ping request - respond immediately with pong."""
         await client.send({"type": "pong"})
-
-    async def _handle_check_update(self, client: ClientConnection, packet: dict) -> None:
-        """Handle client update check request."""
-        client_version = packet.get("version", "0.0.0")
-        
-        # Get latest version info (would normally read from file or endpoint)
-        # For now, return current server version and download info
-        await client.send({
-            "type": "update_available",
-            "current_version": VERSION,
-            "download_url": "https://playpalace.dev/releases/latest.json",
-            "changelog": "Check website for latest features and fixes"
-        })
 
     async def _handle_get_online_players(self, client: ClientConnection, packet: dict) -> None:
         """Handle request for list of online players."""
