@@ -1,10 +1,11 @@
 {
   "messages": [
     {
-      "id": "welcome-11.2.5",
-      "active": true,
-      "title": "Welcome to PlayPalace",
-      "message": "Welcome to PlayPalace! Enjoy playing games with friends.\n\nHave feedback or found a bug? Visit playpalace.dev to reach out.\n\nWe appreciate your support!"
+      "id": "welcome_motd_11.2.5",
+      "title": "Welcome to PlayPalace 11.2.5!",
+      "message": "Welcome to PlayPalace!\n\n• This server and project are in rapid development.\n• If you encounter any bugs, have suggestions, or want to provide feedback, please fill out our <a href=\"https://playpalace.dev/feedback.html\">feedback form</a>.\n• We appreciate your patience and feedback as we continue improving the platform!",
+      "dismissable": true,
+      "active": truert!"
     }
   ]
 }
