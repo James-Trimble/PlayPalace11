@@ -1,9 +1,9 @@
 {
   "messages": [
     {
-      "id": "update-11.2.5-welcome",
-      "title": "Welcome to PlayPalace 11.2.5",
-      "message": "<p>Welcome back to PlayPalace! Here's what's new:</p><ul><li><strong>Lobby Chat</strong>: Everyone not at a table can chat together while browsing games.</li><li><strong>Poker Arrives</strong>: Five Card Draw and Texas Hold'em are ready to play.</li><li><strong>Age of Heroes</strong>: Playable but still in progress—let us know how it feels.</li></ul><p>We value your feedback. Please share thoughts or issues by clicking the feedback button below.</p><p><a href=\"https://playpalace.dev/feedback.html\">Open feedback form</a></p>",
+      "id": "welcome_motd_11.2.5",
+      "title": "Welcome to PlayPalace 11.2.5!",
+      "message": "Welcome to PlayPalace!\nThis server and project are in rapid development.\nIf you encounter any bugs, have suggestions, or want to provide feedback, please fill out our <a href=\"https://playpalace.dev/feedback.html\">feedback form</a>.\nWe appreciate your patience and feedback as we continue improving the platform!",
 
       "dismissable": true,
       "active": true
