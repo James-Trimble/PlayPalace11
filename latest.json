@@ -1,7 +1,7 @@
 {
   "version": "11.2.5",
   "download_url": "https://playpalace.dev/releases/PlayPalace-11.2.5.zip",
-  "sha256": "AC4CD88DB519D05B2C9C211340C0C89BDE88962B0BD2892DA36FCC5A36043A72",
-  "whats_new": "Version gate with download dialog, ARIA accessibility improvements, MOTD bullet fix, connection dialog cleanup",
-  "notes": "Major update - old clients will be prompted to download this version."
+  "sha256": "CC3CC2C1486D40ED1E79A4BC496BE31A2DA1E75310C84CD148A2C7BD8BABF959",
+  "whats_new": "Fixed update dialog link, default server configuration, manual login support, simplified account registration",
+  "notes": "Major update - includes built-in PlayPalace server configuration for new users."
 }

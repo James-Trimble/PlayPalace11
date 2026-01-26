@@ -730,22 +730,16 @@ class MainWindow(wx.Frame):
     def send_table_chat(self, message: str):
         """Send table chat message to server.
         
-        Sends as "table" chat (if in a table) or "game_lobby" chat (if not in a table).
-        The server determines who receives it based on table membership.
+        Sends as "table" chat; server delivers to tablemates or falls back to lobby if not seated.
         """
         if not message:
             return
         lang = self.get_language_name()
         if not lang:
             return
-        
-        # Always send as game_lobby chat - server will route appropriately
-        # If user is in a table, they'll get table chat
-        # If not in a table, they'll get game_lobby chat with all other non-table users
-        convo_type = "game_lobby"
-        
+        # Send as table chat; server will route appropriately.
         self.network.send_packet(
-            {"type": "chat", "convo": convo_type, "message": message, "language": lang}
+            {"type": "chat", "convo": "table", "message": message, "language": lang}
         )
 
     def send_global_chat(self, prefix: str, message: str):
@@ -1963,8 +1957,8 @@ class MainWindow(wx.Frame):
                 return
 
             latest_version = meta.get("version") or ""
-            download_url = meta.get("url") or ""
-            changelog = meta.get("changelog") or ""
+            download_url = meta.get("download_url") or meta.get("url") or ""
+            changelog = meta.get("changelog") or meta.get("whats_new") or ""
 
             current = self._parse_version(CLIENT_VERSION)
             latest = self._parse_version(latest_version)

@@ -984,6 +984,32 @@ class Server:
             else:
                 self._show_categories_menu(user)
 
+    def _add_spectator_to_game(self, table, game, user: NetworkUser):
+        """Attach the user as a spectator to the game and rebuild menus."""
+        # Track table membership (idempotent if already present)
+        table.add_member(user.username, user, as_spectator=True)
+
+        existing_player = game.get_player_by_id(user.uuid)
+        if existing_player:
+            # Reattach to existing player record
+            existing_player.is_bot = False
+            existing_player.is_spectator = True
+            game.attach_user(existing_player.id, user)
+            if existing_player.id not in game.player_action_sets:
+                game.setup_player_actions(existing_player)
+        else:
+            # Create a fresh spectator entry
+            spectator = game.create_player(user.uuid, user.username, is_bot=False)
+            spectator.is_spectator = True
+            game.players.append(spectator)
+            game.attach_user(spectator.id, user)
+            game.setup_player_actions(spectator)
+
+        # Let them know they've joined and sync menus/audio
+        user.speak_l("spectator-joined", host=table.host)
+        game.broadcast_sound("join.ogg")
+        game.rebuild_all_menus()
+
     async def _handle_join_selection(
         self, user: NetworkUser, selection_id: str, state: dict
     ) -> None:
@@ -1023,8 +1049,7 @@ class Server:
                     return
                 else:
                     # No matching player - join as spectator instead
-                    table.add_member(user.username, user, as_spectator=True)
-                    user.speak_l("spectator-joined", host=table.host)
+                    self._add_spectator_to_game(table, game, user)
                     self._user_states[user.username] = {
                         "menu": "in_game",
                         "table_id": table_id,
@@ -1045,9 +1070,7 @@ class Server:
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
 
         elif selection_id == "join_spectator":
-            table.add_member(user.username, user, as_spectator=True)
-            user.speak_l("spectator-joined", host=table.host)
-            # TODO: spectator viewing - for now just track membership
+            self._add_spectator_to_game(table, game, user)
             self._user_states[user.username] = {"menu": "in_game", "table_id": table_id}
 
         elif selection_id == "back":
@@ -2186,10 +2209,10 @@ class Server:
         language = packet.get("language", "English")
 
         if convo == "table":
-            # Local table chat enabled for all table members (lobby and in-game)
+            # Table chat: only table members hear it; if sender isn't in a table, fall back to lobby chat
             table = self._tables.find_user_table(username)
+
             if table:
-                # Broadcast to all table members
                 for member_name in [m.username for m in table.members]:
                     user = self._users.get(member_name)
                     if user:
@@ -2202,6 +2225,22 @@ class Server:
                                 "language": language,
                             }
                         )
+            else:
+                # Not in a table: treat as lobby chat
+                for other_username in self._users.keys():
+                    other_table = self._tables.find_user_table(other_username)
+                    if not other_table:
+                        user = self._users.get(other_username)
+                        if user:
+                            await user.connection.send(
+                                {
+                                    "type": "chat",
+                                    "convo": "game_lobby",
+                                    "sender": username,
+                                    "message": message,
+                                    "language": language,
+                                }
+                            )
         elif convo == "game_lobby":
             # Game lobby chat: all users NOT in a table can chat
             # This is for anyone in menus/browsing, not in an actual game table

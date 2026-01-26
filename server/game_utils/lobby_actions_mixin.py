@@ -130,7 +130,7 @@ class LobbyActionsMixin:
 
     def _action_leave_game(self, player: "Player", action_id: str) -> None:
         """Leave the game."""
-        if self.status == "playing" and not player.is_bot:
+        if self.status == "playing" and not player.is_bot and not player.is_spectator:
             # Mid-game: replace human with bot instead of removing
             # Keep the same player ID so they can rejoin and take over
             player.is_bot = True

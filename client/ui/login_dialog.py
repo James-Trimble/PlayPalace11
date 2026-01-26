@@ -74,8 +74,11 @@ class LoginDialog(wx.Dialog):
         button_sizer.Add(self.login_btn, 0, wx.RIGHT, 5)
 
         self.create_account_btn = wx.Button(self.panel, label="Create &Account")
-        self.create_account_btn.Hide()
         button_sizer.Add(self.create_account_btn, 0, wx.RIGHT, 5)
+        
+        self.login_another_btn = wx.Button(self.panel, label="Login to &Another Account")
+        self.login_another_btn.Hide()
+        button_sizer.Add(self.login_another_btn, 0, wx.RIGHT, 5)
 
         cancel_btn = wx.Button(self.panel, wx.ID_CANCEL, "&Cancel")
         button_sizer.Add(cancel_btn, 0)
@@ -90,6 +93,7 @@ class LoginDialog(wx.Dialog):
         self.server_combo.Bind(wx.EVT_COMBOBOX, self.on_server_change)
         self.login_btn.Bind(wx.EVT_BUTTON, self.on_login)
         self.create_account_btn.Bind(wx.EVT_BUTTON, self.on_create_account)
+        self.login_another_btn.Bind(wx.EVT_BUTTON, self.on_login_another)
         cancel_btn.Bind(wx.EVT_BUTTON, self.on_cancel)
         self.accounts_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_login)
 
@@ -143,12 +147,29 @@ class LoginDialog(wx.Dialog):
 
         server_id = self._get_selected_server_id()
         if not server_id:
+            self.create_account_btn.Hide()
+            self.login_btn.Show()
+            self.login_another_btn.Hide()
             return
 
         accounts = self.config_manager.get_server_accounts(server_id)
         for account_id, account in accounts.items():
             self.accounts_list.Append(account.get("username", "Unknown"))
             self._account_ids.append(account_id)
+
+        # Show appropriate buttons based on whether accounts exist
+        if len(self._account_ids) == 0:
+            # No accounts: show "Create Account" and "Login" for manual entry
+            self.create_account_btn.Show()
+            self.login_btn.Show()
+            self.login_another_btn.Hide()
+        else:
+            # Accounts exist: show "Login" (for saved) and "Login to Another Account" for manual
+            self.create_account_btn.Show()
+            self.login_btn.Show()
+            self.login_another_btn.Show()
+
+        self.panel.Layout()
 
         # Select last used account for this server, or first account if none
         last_account_id = self.config_manager.get_last_account_id(server_id)
@@ -195,9 +216,10 @@ class LoginDialog(wx.Dialog):
             return
 
         account_id = self._get_selected_account_id()
+        
+        # If no accounts exist or none selected, prompt for manual login
         if not account_id:
-            wx.MessageBox("Please select an account", "Error", wx.OK | wx.ICON_ERROR)
-            self.accounts_list.SetFocus()
+            self._manual_login(server_id)
             return
 
         # Get account credentials
@@ -215,6 +237,48 @@ class LoginDialog(wx.Dialog):
         # Save last used server and account
         self.config_manager.set_last_account(server_id, account_id)
 
+        self.EndModal(wx.ID_OK)
+    
+    def on_login_another(self, event):
+        """Handle login to another account button click."""
+        server_id = self._get_selected_server_id()
+        if not server_id:
+            wx.MessageBox("Please select a server", "Error", wx.OK | wx.ICON_ERROR)
+            self.server_combo.SetFocus()
+            return
+        
+        self._manual_login(server_id)
+    
+    def _manual_login(self, server_id):
+        """Prompt for username and password manually."""
+        dlg = wx.TextEntryDialog(self, "Enter username:", "Login")
+        if dlg.ShowModal() != wx.ID_OK:
+            dlg.Destroy()
+            return
+        username = dlg.GetValue().strip()
+        dlg.Destroy()
+        
+        if not username:
+            wx.MessageBox("Username cannot be empty", "Error", wx.OK | wx.ICON_ERROR)
+            return
+        
+        dlg = wx.PasswordEntryDialog(self, "Enter password:", "Login")
+        if dlg.ShowModal() != wx.ID_OK:
+            dlg.Destroy()
+            return
+        password = dlg.GetValue()
+        dlg.Destroy()
+        
+        if not password:
+            wx.MessageBox("Password cannot be empty", "Error", wx.OK | wx.ICON_ERROR)
+            return
+        
+        self.server_id = server_id
+        self.account_id = None  # No saved account
+        self.username = username
+        self.password = password
+        self.server_url = self.config_manager.get_server_url(server_id)
+        
         self.EndModal(wx.ID_OK)
 
     def on_create_account(self, event):
@@ -239,6 +303,7 @@ class LoginDialog(wx.Dialog):
         dlg = RegistrationDialog(self, server_url)
         dlg.ShowModal()
         dlg.Destroy()
+        self._refresh_accounts_list()
 
     def on_cancel(self, event):
         """Handle cancel button click."""

@@ -1,9 +1,17 @@
 """Sound and music manager for Play Palace v9 client."""
 
 import os
+import sys
 import threading
 import time
+from pathlib import Path
 from sound_cacher import SoundCacher
+
+
+def resource_path(relative_path: str) -> str:
+    """Return absolute path to bundled resources, works in PyInstaller onefile."""
+    base_path = getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)
+    return str(Path(base_path) / relative_path)
 
 
 class AudioPlaylist:
@@ -325,7 +333,7 @@ class SoundManager:
         self.current_music = None
         self.current_music_name = None
         self.music_volume = 0.2
-        self.sounds_folder = "sounds"
+        self.sounds_folder = resource_path("sounds")
 
         # Configurable menu sounds (can be changed by server)
         self.menuclick_sound = "menuclick.ogg"

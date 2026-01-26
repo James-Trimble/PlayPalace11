@@ -115,9 +115,21 @@ class ConfigManager:
 
     def _get_default_identities(self) -> Dict[str, Any]:
         """Get default identities structure."""
+        # Create a default PlayPalace server
+        default_server_id = "playpalace-default-server"
         return {
-            "last_server_id": None,
-            "servers": {},  # server_id -> server info with accounts
+            "last_server_id": default_server_id,
+            "servers": {
+                default_server_id: {
+                    "server_id": default_server_id,
+                    "name": "PlayPalace",
+                    "host": "wss://ws.playpalace.dev",
+                    "port": "443",
+                    "notes": "",
+                    "accounts": {},
+                    "last_account_id": None,
+                }
+            },
         }
 
     def _load_profiles(self) -> Dict[str, Any]:
